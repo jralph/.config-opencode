@@ -1,0 +1,167 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "fullstack-engineer",
+  "plugin": ["opencode-gemini-auth@latest", "@zhafron/opencode-kiro-auth", "@ramtinj95/opencode-tokenscope", "opencode-helicone-session", "@zenobius/opencode-skillful", "opencode-wakatime", "opencode-sessions", "@mailshieldai/opencode-canvas", "opencode-agent-memory"],
+  "lsp": {},
+  "model": "kimi-for-coding/k2p5",
+  "small_model": "google/gemini-3-flash-preview",
+  "agent": {
+    "build": {
+      "disable": true
+    },
+    "plan": {
+      "disable": true
+    },
+    "general": {
+      "disable": true
+    },
+    "explore": {
+      "disable": true
+    }
+  },
+  "permission": {
+    "bash": "allow",     // Safety: Ask user before running shell commands by default
+    "edit": "allow",     // Safety: Ask before writing files
+    "webfetch": "allow",
+    "task": "deny",   // Logic: Agents calling agents is generally safe
+    "question": "allow",
+    "mcp": "allow",
+    "memory_append": "allow",  // Agents can autonomously add memories
+    "memory_replace": "ask",   // Safety: Ask before REWRITING memory
+    "memory_read": "allow"
+  },
+  "mcp": {
+      "filesystem": {
+        "type": "local",
+        "command": ["npx",
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "."
+        ]
+    },
+     "fetch": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-fetch"]
+    },
+    "json": {
+      "type": "local",
+      "command": ["npx", "-y",
+        "@gongrzhe/server-json-mcp@1.0.3"],
+    },
+     "exa": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp",
+      "enabled": true
+    },
+    "grep.app": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "grep-mcp"
+      ]
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
+      }
+    },
+    "Context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "{env:CONTEXT7_API_KEY}"
+      ]
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "web-search": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@brave/brave-search-mcp-server",
+        "--transport",
+        "stdio"
+      ],
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      }
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest"
+      ]
+    },
+    "codegraphcontext": {
+      "type": "local",
+      "command": [
+        "cgc",
+        "start"
+      ],
+      "environment": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USERNAME": "{env:NEO4J_USERNAME}",
+        "NEO4J_PASSWORD": "{env:NEO4J_PASSWORD}"
+      }
+    }
+  },
+  "provider": {
+    "kiro": {
+      "models": {
+        "claude-sonnet-4-5": {
+          "name": "Claude Sonnet 4.5",
+          "limit": { "context": 200000, "output": 64000 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
+        },
+        "claude-sonnet-4-5-thinking": {
+          "name": "Claude Sonnet 4.5 Thinking",
+          "limit": { "context": 200000, "output": 64000 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
+          "variants": {
+            "low": { "thinkingConfig": { "thinkingBudget": 8192 } },
+            "medium": { "thinkingConfig": { "thinkingBudget": 16384 } },
+            "max": { "thinkingConfig": { "thinkingBudget": 32768 } }
+          }
+        },
+        "claude-haiku-4-5": {
+          "name": "Claude Haiku 4.5",
+          "limit": { "context": 200000, "output": 64000 },
+          "modalities": { "input": ["text", "image"], "output": ["text"] }
+        },
+        "claude-opus-4-5": {
+          "name": "Claude Opus 4.5",
+          "limit": { "context": 200000, "output": 64000 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
+        },
+        "claude-opus-4-5-thinking": {
+          "name": "Claude Opus 4.5 Thinking",
+          "limit": { "context": 200000, "output": 64000 },
+          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
+          "variants": {
+            "low": { "thinkingConfig": { "thinkingBudget": 8192 } },
+            "medium": { "thinkingConfig": { "thinkingBudget": 16384 } },
+            "max": { "thinkingConfig": { "thinkingBudget": 32768 } }
+          }
+        }
+      }
+    }
+  }
+}
