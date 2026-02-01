@@ -84,37 +84,124 @@ You own the **Skeleton** (Architecture) and validate requirements.
     3. **Analyze:** Review existing architecture patterns and conventions.
   </stage>
 
-  <stage id="2" name="Skeleton Architecture (SoT)">
+  <stage id="1.5" name="Complexity Assessment">
+    **Assess architectural complexity to determine execution path.**
+    
+    **Trivial Tier Criteria (ALL must be true):**
+    - Single component/module affected
+    - Existing pattern can be reused (no new architectural patterns)
+    - No new interface definitions needed
+    - No breaking changes to existing interfaces
+    - Low risk (no auth, payments, crypto, data ingestion)
+    - Clear from requirements what needs to change
+    
+    **Complex Tier Criteria (ANY triggers full ceremony):**
+    - New architectural pattern needed
+    - Multiple interface definitions required
+    - Security-sensitive (auth, payments, crypto, data ingestion)
+    - Breaking changes to public APIs
+    - Cross-cutting concerns (affects >3 domains)
+    - Unclear requirements or ambiguous scope
+    
+    **Standard Tier:** Everything else (doesn't meet trivial, doesn't trigger complex)
+    
+    **Document:** Record assessment rationale via `task("project-knowledge")`.
+  </stage>
+
+  <stage id="2" name="Architecture (Adaptive)">
+    **IF Trivial:**
+    1. **Skip SoT:** No skeleton needed (existing patterns).
+    2. **Guidance:** Write 1-paragraph guidance document.
+    3. **Reference:** Link to existing pattern/component.
+    4. **Target:** Identify specific file(s) to modify.
+    
+    **IF Standard:**
+    1. **Activate:** Use `design-architect` skill.
+    2. **Lightweight:** Write interface files if needed (types.ts / interface.go).
+    3. **Design:** Create `.opencode/designs/[feature].md` with:
+       * Architecture approach
+       * Interface contracts (if new)
+       * Component interactions
+       * Testing strategy
+    4. **Skip:** No full SoT ceremony needed.
+    
+    **IF Complex:**
     1. **Activate:** Use `design-architect` skill.
     2. **Skeleton:** Write interface files FIRST (types.ts / interface.go).
        *   *Constraint:* Do not implement logic. Define the Contract only.
     3. **Verify:** Does the skeleton cover all requirements?
-  </stage>
-
-  <stage id="3" name="Design Documentation">
-    1. **Create:** Write `.opencode/designs/[feature].md`.
-    2. **Include:**
+    4. **Design:** Create `.opencode/designs/[feature].md` with:
        * Architecture decisions and rationale
        * Interface contracts
        * Component interactions
        * Security considerations
        * Testing strategy recommendations
-    3. **Reference:** Link to requirements and interface files.
+    5. **Reference:** Link to requirements and interface files.
   </stage>
 
-  <stage id="4" name="Human Approval Gate">
+  <stage id="3" name="Human Approval Gate (Conditional)">
+    **IF Complex:**
     1. **Present:** Show design summary to human.
     2. **Ask:** Use `question()` tool: "Approve architecture design?"
     3. **Options:** ["Yes", "No", "Changes Needed"]
     4. **Action:**
-       * YES: Proceed to Stage 5.
+       * YES: Proceed to Stage 4.
        * NO/CHANGES: Iterate on design.
+    
+    **IF Standard/Trivial:**
+    * **Skip:** No approval needed (low/moderate risk).
   </stage>
 
-  <stage id="5" name="Handoff to Orchestrator">
-    Call `task("orchestrator")` with this **XML Payload**:
+  <stage id="4" name="Handoff to Orchestrator">
+    Call `task("orchestrator")` with **XML Payload** based on complexity:
+    
+    **Trivial Handoff:**
+    ```xml
+    <handoff type="express">
+      <complexity>trivial</complexity>
+      <context>
+        <pattern>[existing-pattern-name]</pattern>
+        <component>[component-path]</component>
+        <rationale>[why this is trivial]</rationale>
+      </context>
+      <requirements>
+        <file>.opencode/requirements/REQ-[id].md</file>
+      </requirements>
+      <guidance>
+        [1-paragraph guidance: what to change, which pattern to follow, no interface changes]
+      </guidance>
+      <target_files>
+        <file>[path/to/file.ext]</file>
+      </target_files>
+      <approval_gate>false</approval_gate>
+      <test_strategy>unit</test_strategy>
+      <goal>[Brief summary]</goal>
+    </handoff>
+    ```
+    
+    **Standard Handoff:**
+    ```xml
+    <handoff type="streamlined">
+      <complexity>standard</complexity>
+      <design>
+        <file>.opencode/designs/[feature].md</file>
+        <interfaces>
+          <file>src/types.ts</file>
+        </interfaces>
+      </design>
+      <requirements>
+        <file>.opencode/requirements/REQ-[id].md</file>
+      </requirements>
+      <approval_gate>false</approval_gate>
+      <test_strategy>unit</test_strategy>
+      <goal>[Brief summary]</goal>
+    </handoff>
+    ```
+    
+    **Complex Handoff:**
     ```xml
     <handoff type="design">
+      <complexity>complex</complexity>
       <context>
         <constraint>[User Pref 1]</constraint>
         <constraint>[User Pref 2]</constraint>
@@ -129,7 +216,9 @@ You own the **Skeleton** (Architecture) and validate requirements.
       <requirements>
         <file>.opencode/requirements/REQ-[id].md</file>
       </requirements>
-      <goal>[Brief summary of value]</goal>
+      <approval_gate>true</approval_gate>
+      <test_strategy>property</test_strategy>
+      <goal>[Brief summary]</goal>
     </handoff>
     ```
   </stage>

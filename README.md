@@ -15,21 +15,28 @@ User Request
     ↓
 Product Owner (requirements approval)
     ↓
-Architect (design approval)
-    ↓
-Orchestrator (merge approval)
+Architect (complexity assessment + design)
+    ↓ [Trivial: auto-merge | Standard/Complex: human approval]
+Orchestrator (adaptive execution)
     ↓
 Engineers (implementation)
     ↓
 Validator (quality gate)
 ```
 
+**Complexity-Based Routing**:
+- **Trivial** (60-70%): Express lane → Auto-merge
+- **Standard** (20-25%): Streamlined → Merge approval
+- **Complex** (10-15%): Full ceremony → All gates
+
 ### Key Principles
 
 - **Protocol-Driven**: Agents communicate via XML payloads for structured handoffs
-- **Human Gates**: Critical decisions require human approval (requirements, design, merge)
+- **Adaptive Execution**: Workflow adapts to architectural complexity
+- **Human Gates**: Critical decisions require human approval (requirements, complex design, standard/complex merge)
 - **Context Injection**: Sub-agents receive full context via XML to prevent hallucination
 - **Circuit Breaker**: Automatic rollback and escalation on repeated failures
+- **Complexity Escalation**: Engineers can escalate if scope exceeds expectations
 - **One-Way Handoffs**: Clear ownership boundaries (no callback loops)
 
 ## Agents
@@ -64,50 +71,105 @@ Validator (quality gate)
 ### Subagents
 
 #### Architect (`architect.md`)
-**Role**: Design and architecture validation  
+**Role**: Design and architecture validation with complexity assessment  
 **Model**: google/gemini-3-pro-preview  
 **Max Steps**: 25
 
-**Thought Pattern**: Skeleton of Thought (SoT)
-1. **Skeleton**: Output file tree or interface definitions ONLY
-2. **Review**: Verify skeleton covers all requirements
-3. **Expansion**: Generate detailed content only after skeleton approval
+**Thought Pattern**: Complexity Assessment + Adaptive Design
+1. **Context**: Query project-knowledge for relevant files and patterns
+2. **Assess**: Evaluate architectural complexity (Trivial/Standard/Complex)
+3. **Design**: Create appropriate design artifacts based on complexity
+4. **Gate**: Human approval for Complex tier only
+5. **Handoff**: Provide tier-specific XML to Orchestrator
+
+**Complexity Tiers**:
+
+**Trivial** (ALL must be true):
+- Single component/module affected
+- Existing pattern can be reused
+- No new interface definitions needed
+- No breaking changes
+- Low risk (no auth, payments, crypto)
+- Clear requirements
+
+**Complex** (ANY triggers full ceremony):
+- New architectural pattern needed
+- Multiple interface definitions required
+- Security-sensitive (auth, payments, crypto, data ingestion)
+- Breaking changes to public APIs
+- Cross-cutting concerns (>3 domains)
+- Unclear requirements
+
+**Standard**: Everything else
 
 **Responsibilities**:
 - Validate EARS requirements (reject if ambiguous)
-- Create interface skeletons (types.ts, interface.go)
-- Write design documentation (`.opencode/designs/[feature].md`)
-- Get human approval on architecture
-- Hand off to Orchestrator
+- Assess architectural complexity
+- Create tier-appropriate design artifacts:
+  * Trivial: 1-paragraph guidance + pattern reference
+  * Standard: Lightweight design doc + interfaces
+  * Complex: Full design doc (SoT) + comprehensive interfaces
+- Get human approval on Complex tier only
+- Hand off to Orchestrator with complexity tier
 
 **Key Protocols**:
 - **EARS Gatekeeper**: Reject non-compliant requirements
 - **Context First**: Always query project-knowledge before designing
-- **Design Only**: No implementation, no worktrees
+- **Complexity Assessment**: Objective criteria for tier selection
+- **Adaptive Design**: Design depth matches complexity
 
 #### Orchestrator (`orchestrator.md`)
-**Role**: Implementation coordination and gate management  
+**Role**: Implementation coordination and gate management with adaptive execution  
 **Model**: google/gemini-3-pro-preview  
 **Max Steps**: 30
 
-**Thought Pattern**: Task Decomposition + Context Injection
-1. **Parse**: Extract design from Architect's XML handoff
-2. **Decompose**: Break into atomic tasks (≤3 files each) using task-planner skill
-3. **Route**: Determine which engineer handles each task
-4. **Inject**: Provide full context via XML payloads (goal, design doc, target file, protocol)
-5. **Monitor**: Track progress and handle failures
+**Thought Pattern**: Adaptive Execution Strategy
+1. **Parse**: Extract complexity tier from Architect's handoff
+2. **Setup**: Create worktree (all tiers for safety)
+3. **Plan**: Task planning based on tier (skip/minimal/full)
+4. **Delegate**: Tier-appropriate delegation strategy
+5. **Gates**: Conditional gates based on tier and risk
+6. **Merge**: Auto-merge for Trivial, human approval for Standard/Complex
+
+**Execution Strategies by Tier**:
+
+**Trivial (Express Lane)**:
+- Skip task planning (single obvious task)
+- Direct assignment to Fullstack Engineer (minimal XML)
+- Skip security gate (low risk)
+- Mandatory validation gate
+- Auto-merge on validation pass
+- ~60-70% time savings
+
+**Standard (Streamlined)**:
+- Minimal task planning
+- Single engineer (Fullstack) with standard XML
+- Conditional security gate (if touches auth/payments/crypto)
+- Mandatory validation gate
+- Human merge approval
+- ~30-40% time savings
+
+**Complex (Full Ceremony)**:
+- Full task decomposition
+- Parallel specialist delegation (System/UI/DevOps)
+- Mandatory security gate (if sensitive)
+- Mandatory validation gate
+- Human merge approval
+- Full ceremony maintained
 
 **Responsibilities**:
-- Create isolated worktrees for features
-- Break design into atomic tasks (≤3 files each)
-- Delegate to specialized engineers via XML payloads
-- Manage security, validation, and merge gates
-- Handle feasibility issues autonomously
+- Parse complexity tier from Architect
+- Create isolated worktrees for all tiers
+- Adapt execution strategy to complexity
+- Delegate to appropriate engineers
+- Manage conditional gates (security, validation, merge)
+- Handle complexity escalations from engineers
 - Clean up worktrees after completion
 
 **Key Protocols**:
-- **Context Injection**: Provide full context to engineers via XML (prevents cold boot hallucination)
+- **Context Injection**: Provide full context via XML (prevents cold boot hallucination)
 - **Circuit Breaker**: Rollback and escalate after 3 failures or >$2 cost
+- **Complexity Escalation**: Re-engage Architect if engineer reports scope growth
 - **PBT Selection**: Require property-based testing for data transformation, math, crypto
 - **Feasibility Authority**: Make implementation calls without callback to Architect
 
@@ -142,6 +204,8 @@ Validator (quality gate)
 - **Thought Pattern**: Chain of Code (CoC)
   - Same as System Engineer but with strict file limit
   - Delegates if scope exceeds 3 files
+- Handles Trivial and Standard tier tasks from Orchestrator
+- Escalates to Orchestrator if complexity exceeds expectations
 - Cross-stack features
 
 **QA Engineer** (`qa-engineer.md`)
@@ -192,10 +256,6 @@ Validator (quality gate)
   - Query memory for lessons learned
   - Synthesize into actionable context map
 - Memory audits every 10 tasks or >500 lines
-
-**Tech Lead** (`tech-lead.md`) ⚠️ DEPRECATED
-- Legacy agent being phased out
-- Functionality split into Architect + Orchestrator
 
 ## Skills
 
@@ -248,6 +308,81 @@ Comprehensive testing guidance: unit, integration, property-based, E2E. Testing 
 
 ## Protocols
 
+### Complexity Tiers
+
+The Architect assesses architectural complexity and selects the appropriate execution path. This ensures simple tasks get streamlined processing while complex work receives full ceremony.
+
+#### Trivial Tier (Express Lane)
+
+**Criteria (ALL must be true)**:
+- Single component/module affected
+- Existing pattern can be reused
+- No new interface definitions needed
+- No breaking changes to existing interfaces
+- Low risk (no auth, payments, crypto, data ingestion)
+- Clear from requirements what needs to change
+
+**Examples**: Bug fixes, typos, config tweaks, doc updates, linter fixes
+
+**Workflow**:
+1. Architect: 1-paragraph guidance + pattern reference
+2. Orchestrator: Direct assignment to Fullstack Engineer (no task planning)
+3. Engineer: Quick implementation following existing pattern
+4. Validator: Mandatory validation
+5. Auto-merge on validation pass (no human approval)
+
+**Time Savings**: ~60-70% compared to full ceremony
+
+#### Standard Tier (Streamlined)
+
+**Criteria**: Doesn't meet Trivial, doesn't trigger Complex
+
+**Examples**: Small features with existing patterns, refactors, new endpoints using established patterns
+
+**Workflow**:
+1. Architect: Lightweight design doc + interfaces (no approval gate)
+2. Orchestrator: Single engineer assignment (minimal task planning)
+3. Engineer: Standard implementation (2-3 files)
+4. Security: Conditional (if touches auth/payments/crypto)
+5. Validator: Mandatory validation
+6. Human merge approval required
+
+**Time Savings**: ~30-40% compared to full ceremony
+
+#### Complex Tier (Full Ceremony)
+
+**Criteria (ANY triggers this)**:
+- New architectural pattern needed
+- Multiple interface definitions required
+- Security-sensitive (auth, payments, crypto, data ingestion)
+- Breaking changes to public APIs
+- Cross-cutting concerns (affects >3 domains)
+- Unclear requirements or ambiguous scope
+
+**Examples**: New features with new patterns, OAuth integration, payment processing, major refactors
+
+**Workflow**:
+1. Architect: Full design doc with SoT + comprehensive interfaces + human approval
+2. Orchestrator: Full task decomposition + parallel specialist delegation
+3. Engineers: Multiple specialists working in parallel
+4. Security: Mandatory if sensitive
+5. Validator: Mandatory validation
+6. Human merge approval required
+
+**Time Savings**: None (appropriate ceremony for complexity)
+
+#### Complexity Escalation
+
+If an engineer discovers during implementation that complexity exceeds the assessed tier:
+
+1. Engineer stops implementation immediately
+2. Engineer reports to Orchestrator: "Complexity exceeds [tier]"
+3. Orchestrator pauses execution
+4. Orchestrator calls Architect with escalation context
+5. Architect reassesses and provides proper design
+6. Orchestrator restarts with correct tier
+7. Escalation documented in project memory
+
 ### XML Handoff Format
 
 **Product Owner → Architect**:
@@ -263,12 +398,34 @@ Comprehensive testing guidance: unit, integration, property-based, E2E. Testing 
 </handoff>
 ```
 
-**Architect → Orchestrator**:
+**Architect → Orchestrator (Trivial)**:
 ```xml
-<handoff type="design">
+<handoff type="express">
+  <complexity>trivial</complexity>
   <context>
-    <constraint>[User Pref 1]</constraint>
+    <pattern>[existing-pattern-name]</pattern>
+    <component>[component-path]</component>
+    <rationale>[why this is trivial]</rationale>
   </context>
+  <requirements>
+    <file>.opencode/requirements/REQ-[id].md</file>
+  </requirements>
+  <guidance>
+    [1-paragraph guidance: what to change, which pattern to follow]
+  </guidance>
+  <target_files>
+    <file>[path/to/file.ext]</file>
+  </target_files>
+  <approval_gate>false</approval_gate>
+  <test_strategy>unit</test_strategy>
+  <goal>[Brief summary]</goal>
+</handoff>
+```
+
+**Architect → Orchestrator (Standard)**:
+```xml
+<handoff type="streamlined">
+  <complexity>standard</complexity>
   <design>
     <file>.opencode/designs/[feature].md</file>
     <interfaces>
@@ -278,11 +435,54 @@ Comprehensive testing guidance: unit, integration, property-based, E2E. Testing 
   <requirements>
     <file>.opencode/requirements/REQ-[id].md</file>
   </requirements>
+  <approval_gate>false</approval_gate>
+  <test_strategy>unit</test_strategy>
   <goal>[Brief summary]</goal>
 </handoff>
 ```
 
-**Orchestrator → Engineer**:
+**Architect → Orchestrator (Complex)**:
+```xml
+<handoff type="design">
+  <complexity>complex</complexity>
+  <context>
+    <constraint>[User Pref 1]</constraint>
+  </context>
+  <design>
+    <file>.opencode/designs/[feature].md</file>
+    <interfaces>
+      <file>src/types.ts</file>
+      <file>src/interfaces.go</file>
+    </interfaces>
+  </design>
+  <requirements>
+    <file>.opencode/requirements/REQ-[id].md</file>
+  </requirements>
+  <approval_gate>true</approval_gate>
+  <test_strategy>property</test_strategy>
+  <goal>[Brief summary]</goal>
+</handoff>
+```
+
+**Orchestrator → Engineer (Trivial)**:
+```xml
+<task type="express">
+  <objective>[1-sentence goal]</objective>
+  <guidance>[Architect's guidance paragraph]</guidance>
+  <resources>
+    <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    <target_file>[path/to/file]</target_file>
+    <pattern_reference>[existing pattern to follow]</pattern_reference>
+  </resources>
+  <protocol>
+    <instruction>Use Chain of Code. Follow existing pattern. Quick implementation.</instruction>
+    <test_strategy>unit</test_strategy>
+    <complexity>trivial</complexity>
+  </protocol>
+</task>
+```
+
+**Orchestrator → Engineer (Standard/Complex)**:
 ```xml
 <task type="implementation">
   <objective>Implement the UUID generator logic.</objective>
@@ -334,8 +534,7 @@ All requirements use [EARS syntax](https://alistairmavin.com/ears/) for unambigu
 │   ├── documentation-engineer.md
 │   ├── staff-engineer.md
 │   ├── validator.md
-│   ├── project-knowledge.md
-│   └── tech-lead.md          # DEPRECATED
+│   └── project-knowledge.md
 ├── skills/                    # Reusable instruction sets
 │   ├── bash-strategy/
 │   ├── code-style-analyst/
