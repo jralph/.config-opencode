@@ -22,6 +22,7 @@ permissions:
 skills:
   - testing-standards
   - dependency-management
+  - error-handling
 ---
 
 # IDENTITY

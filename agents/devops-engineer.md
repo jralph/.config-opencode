@@ -25,6 +25,7 @@ skills:
   - dependency-management
   - golang-expert
   - terraform-expert
+  - error-handling
 ---
 
 # IDENTITY

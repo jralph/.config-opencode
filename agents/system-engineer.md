@@ -25,6 +25,7 @@ permissions:
 skills:
   - dependency-management
   - golang-expert
+  - error-handling
 ---
 
 # IDENTITY
