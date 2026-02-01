@@ -32,7 +32,7 @@ description: General coding principles, complexity standards, and best practices
 
 Maintain code quality by enforcing complexity thresholds.
 
-### Metrics
+### Function-Level Metrics
 - **Cyclomatic Complexity**: 
   - **≤10**: Acceptable
   - **11-15**: Warning (Refactor)
@@ -53,6 +53,64 @@ Maintain code quality by enforcing complexity thresholds.
 To consistently meet these complexity standards:
 - **Draft First**: Use the **Chain of Code (CoC)** protocol to draft your interface and logic structure *before* implementation.
 - **Simulate**: "Run" the draft in your head. If the draft looks complex, the code will be worse. Refactor the draft.
+
+## File & Line Length Standards
+
+### File Length Limits
+
+**Production Code**:
+- **Soft limit**: 200 lines (ideal - encourages focused modules)
+- **Medium limit**: 600 lines (acceptable with justification)
+- **Hard limit**: 1000 lines (critical - must refactor)
+
+**Test Code** (1.5x multiplier for table-driven patterns):
+- **Soft limit**: 300 lines
+- **Medium limit**: 900 lines
+- **Hard limit**: 1500 lines
+
+**Exceptions**:
+- Generated code (protobuf, OpenAPI, code-gen tools)
+- Configuration files (large config definitions)
+- Migration files are NOT exempt
+
+### Line Length Standards
+
+- **Soft limit**: 120 characters (preferred)
+- **No hard limit** (pragmatic for URLs, error messages, complex expressions)
+
+Favor brevity but prioritize readability over strict character counts.
+
+### Rationale
+
+**Why 200 lines?**
+- Fits on a single screen with context
+- Encourages single responsibility
+- Easier to test and review
+
+**Why 1000 line hard limit?**
+- Beyond this, files become unmaintainable
+- Navigation and comprehension suffer
+- Indicates architectural issues
+
+**Why 120 characters?**
+- Modern standard across languages
+- Balances readability with screen real estate
+- Accommodates side-by-side diffs
+
+### When to Split Files
+
+Split when:
+1. Multiple unrelated responsibilities
+2. Difficult to navigate or find functionality
+3. Poor cohesion between components
+4. Approaching medium/hard limits
+
+### Refactoring Strategies
+
+**By Responsibility**: Separate distinct concerns into focused files
+**By Layer**: Split by architectural boundaries (handlers, services, repositories)
+**By Feature**: Group related functionality into feature modules
+**By Type**: Extract interfaces, implementations, and models
 
 ## Documentation
 - **Why, not What**: Document intent and decisions.

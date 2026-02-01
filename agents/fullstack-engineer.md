@@ -23,6 +23,7 @@ permissions:
     "*": deny
 skills:
   - dependency-management
+  - golang-expert
 ---
 
 # IDENTITY
@@ -97,7 +98,7 @@ The "First Responder" for small, atomic tasks (<3 files).
   </stage>
 
   <stage id="1" name="Execute (CoC)">
-    1. **Activate:** `git-workflow` skill.
+    1. **Activate:** `git-workflow` skill (and `golang-expert` if working with Go code).
     2. **Simulate:** Use `sequentialthinking` to draft Interface/Pseudocode.
        * Input: Define function signature.
        * Process: Write comment-based steps.

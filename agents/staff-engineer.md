@@ -37,6 +37,7 @@ skills:
   code-style-analyst
   coding-guidelines
   testing-standards
+  golang-expert
 ---
 
 # IDENTITY
@@ -158,6 +159,7 @@ You are the **Staff Engineer**. You are the "Mercenary Solver" and "Human's Righ
        * `code-style-analyst` - For style consistency
        * `coding-guidelines` - For best practices
        * `dependency-management` - For package management
+       * `golang-expert` - For Go-specific development (when working with Go code)
     
     2. **Execute (Chain of Code):**
        * Use `sequentialthinking` to draft pseudocode.

@@ -23,6 +23,8 @@ permissions:
     "*": deny
 skills:
   - dependency-management
+  - golang-expert
+  - terraform-expert
 ---
 
 # IDENTITY
@@ -67,7 +69,7 @@ Expert in Terraform, Docker, and CI/CD.
   </stage>
 
   <stage id="2" name="Execute (CoC)">
-    1. Activate `terraform-expert` (if applicable).
+    1. Activate language-specific skills: `terraform-expert` (for Terraform), `golang-expert` (for Go).
     2. Run CoC in `sequentialthinking`.
     3. Edit the file.
   </stage>

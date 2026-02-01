@@ -83,7 +83,34 @@ linters-settings:
   funlen:
     lines: 60
     statements: 40
+  lll:
+    line-length: 120
+    tab-width: 1
+
+linters:
+  enable:
+    - cyclop
+    - gocognit
+    - funlen
+    - lll
+    - gocritic
+
+issues:
+  exclude-rules:
+    # Exclude line length for generated files
+    - path: '(.+)_gen\.go$'
+      linters:
+        - lll
+    - path: '(.+)\.pb\.go$'
+      linters:
+        - lll
+    # Exclude line length for test files with long table entries
+    - path: '(.+)_test\.go$'
+      linters:
+        - lll
 ```
+
+**Note**: golangci-lint doesn't have built-in file length checking. Consider custom tooling or manual review for files exceeding limits.
 
 ## Complexity Standards
 
@@ -94,6 +121,57 @@ linters-settings:
 ### Refactoring Strategies
 1. **Extract Helper Functions**: Break complex logic into smaller, focused functions.
 2. **Use Early Returns**: Reduce nesting depth by returning early from error conditions.
+
+## File Organization Standards
+
+### File Length Limits
+
+**Production Code**:
+- **Soft limit**: 200 lines (ideal - encourages focused, single-purpose files)
+- **Medium limit**: 600 lines (acceptable with clear justification)
+- **Hard limit**: 1000 lines (critical - must refactor)
+
+**Test Code** (1.5x multiplier for table-driven tests):
+- **Soft limit**: 300 lines
+- **Medium limit**: 900 lines
+- **Hard limit**: 1500 lines
+
+**Exceptions**:
+- Generated code (protobuf, mocks, code-gen tools)
+- Configuration files (large config structs)
+- Migration files are NOT exempt - keep them focused
+
+### Line Length Standards
+
+- **Soft limit**: 120 characters (preferred for readability)
+- **No hard limit** (pragmatic for complex expressions, long URLs, error messages)
+
+Go community typically uses 100-120 characters. Favor brevity but don't sacrifice clarity with awkward line breaks.
+
+### When to Split Files
+
+Split files when:
+1. **Multiple responsibilities**: File handles unrelated concerns
+2. **Poor cohesion**: Functions don't work together toward a common purpose
+3. **Hard to navigate**: Difficult to find specific functionality
+4. **Test complexity**: Test file mirrors an oversized implementation file
+
+### Refactoring Oversized Files
+
+**By Feature**: Group related types, interfaces, and functions into feature-specific files
+```
+user.go          → user_service.go, user_repository.go, user_models.go
+```
+
+**By Layer**: Separate by architectural layer
+```
+handlers.go      → user_handler.go, order_handler.go, product_handler.go
+```
+
+**By Interface**: Extract interfaces and implementations
+```
+storage.go       → storage_interface.go, s3_storage.go, local_storage.go
+```
 
 ## Key Conventions
 

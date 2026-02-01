@@ -24,6 +24,7 @@ permissions:
     "*": deny
 skills:
   - dependency-management
+  - golang-expert
 ---
 
 # IDENTITY
@@ -69,7 +70,7 @@ Expert in Backend, APIs, and Database.
   </stage>
 
   <stage id="2" name="Execute (CoC)">
-    1. Activate `git-workflow`.
+    1. Activate `git-workflow` (and `golang-expert` if working with Go code).
     2. Run CoC in `sequentialthinking`.
     3. Edit the file.
   </stage>
