@@ -41,6 +41,13 @@ Validator (quality gate)
 **Mode**: Primary  
 **Triggers**: User requests for new features
 
+**Thought Pattern**: EARS Translation
+1. **Context**: Read user preferences from memory
+2. **Clarify**: Ask questions if request is vague (never guess)
+3. **Translate**: Convert user request to EARS format (Trigger → Response)
+4. **Document**: Write `.opencode/requirements/REQ-[id].md`
+5. **Gate**: Get human approval before handoff
+
 **Responsibilities**:
 - Transform user requests into EARS-formatted requirements
 - Validate requirements are unambiguous
@@ -49,7 +56,7 @@ Validator (quality gate)
 - Delegate to Architect
 
 **Key Rules**:
-- Cannot read or write source code
+- Cannot read or write source code (Air Gap Rule)
 - Cannot run shell commands
 - Must use EARS templates (Event-Driven, State-Driven, etc.)
 - Reads user preferences from memory
@@ -61,6 +68,11 @@ Validator (quality gate)
 **Model**: google/gemini-3-pro-preview  
 **Max Steps**: 25
 
+**Thought Pattern**: Skeleton of Thought (SoT)
+1. **Skeleton**: Output file tree or interface definitions ONLY
+2. **Review**: Verify skeleton covers all requirements
+3. **Expansion**: Generate detailed content only after skeleton approval
+
 **Responsibilities**:
 - Validate EARS requirements (reject if ambiguous)
 - Create interface skeletons (types.ts, interface.go)
@@ -69,14 +81,21 @@ Validator (quality gate)
 - Hand off to Orchestrator
 
 **Key Protocols**:
-- **Skeleton of Thought (SoT)**: Define interfaces before implementation
 - **EARS Gatekeeper**: Reject non-compliant requirements
 - **Context First**: Always query project-knowledge before designing
+- **Design Only**: No implementation, no worktrees
 
 #### Orchestrator (`orchestrator.md`)
 **Role**: Implementation coordination and gate management  
 **Model**: google/gemini-3-pro-preview  
 **Max Steps**: 30
+
+**Thought Pattern**: Task Decomposition + Context Injection
+1. **Parse**: Extract design from Architect's XML handoff
+2. **Decompose**: Break into atomic tasks (≤3 files each) using task-planner skill
+3. **Route**: Determine which engineer handles each task
+4. **Inject**: Provide full context via XML payloads (goal, design doc, target file, protocol)
+5. **Monitor**: Track progress and handle failures
 
 **Responsibilities**:
 - Create isolated worktrees for features
@@ -87,7 +106,7 @@ Validator (quality gate)
 - Clean up worktrees after completion
 
 **Key Protocols**:
-- **Context Injection**: Provide full context to engineers via XML
+- **Context Injection**: Provide full context to engineers via XML (prevents cold boot hallucination)
 - **Circuit Breaker**: Rollback and escalate after 3 failures or >$2 cost
 - **PBT Selection**: Require property-based testing for data transformation, math, crypto
 - **Feasibility Authority**: Make implementation calls without callback to Architect
@@ -96,27 +115,50 @@ Validator (quality gate)
 
 **System Engineer** (`system-engineer.md`)
 - Backend logic and business rules
-- Chain of Code (CoC) protocol
+- **Thought Pattern**: Chain of Code (CoC)
+  - Simulate: Draft interface/pseudocode in `sequentialthinking`
+  - Execute: Immediately implement with `edit_file`
+  - Silence: Keep draft in tool, don't output to chat
+- Uses code graph for context discovery
 
 **UI Engineer** (`ui-engineer.md`)
 - Frontend components and visual elements
-- Chain of Design (CoD) protocol
+- **Thought Pattern**: Chain of Draft (CoD)
+  - Draft: Plan component structure (JSX hierarchy, CSS classes, state/props)
+  - Execute: Immediately implement with `edit_file`
+  - Silence: Keep draft in tool, don't output to chat
+- Uses `canvas_render` to verify visual output
 
 **DevOps Engineer** (`devops-engineer.md`)
 - Infrastructure, CI/CD, deployment
-- Terraform, Docker, GitHub Actions
+- **Thought Pattern**: Chain of Code (CoC)
+  - Simulate: Draft configuration/script in `sequentialthinking`
+  - Execute: Immediately implement
+  - Silence: Keep draft in tool
+- Terraform, Docker, GitHub Actions expertise
 
 **Fullstack Engineer** (`fullstack-engineer.md`)
-- Atomic tasks (<3 files)
+- Atomic tasks (<3 files only)
+- **Thought Pattern**: Chain of Code (CoC)
+  - Same as System Engineer but with strict file limit
+  - Delegates if scope exceeds 3 files
 - Cross-stack features
 
 **QA Engineer** (`qa-engineer.md`)
 - Unit, integration, and property-based tests
+- **Thought Pattern**: EARS Mapping
+  - Translate requirements to test cases
+  - EARS: "When [X], System shall [Y]" → Test: "When [X], should [Y]"
+  - AAA pattern (Arrange-Act-Assert)
 - 80% coverage minimum, 90% target
-- AAA pattern (Arrange-Act-Assert)
+- Property-based testing for data transformation, math, crypto
 
 **Security Engineer** (`security-engineer.md`)
 - Security audits for auth, payments, crypto
+- **Thought Pattern**: Data Flow Analysis
+  - Trace tainted data through code graph
+  - Hunt for vulnerability patterns (injection, XSS, secrets)
+  - Report findings without fixing (read-only)
 - OWASP compliance
 
 **Documentation Engineer** (`documentation-engineer.md`)
@@ -127,18 +169,29 @@ Validator (quality gate)
 
 **Staff Engineer** (`staff-engineer.md`)
 - Complex debugging and rescue missions
+- **Thought Pattern**: Anti-Hallucination Protocol
+  - Verify: Read live documentation with `webfetch`/`chrome-devtools` before using new libraries
+  - Analyze: Trace dependencies deep into `node_modules` with code graph
+  - Implement: Only after verification
 - New library integration
 - Cross-cutting changes (>3 domains)
 
 **Validator** (`validator.md`)
 - Quality gatekeeper
-- Returns PASS/WARN/FAIL verdicts
+- **Thought Pattern**: Three-Verdict System
+  - FAIL: Logic bugs, missed requirements, failing tests
+  - WARN: Style issues (functional but messy)
+  - PASS: Perfect compliance
 - Cannot edit code (read-only)
+- Runs linters, tests, checks requirements coverage
 
 **Project Knowledge** (`project-knowledge.md`)
 - Project memory and context management
-- Code graph queries
-- Memory audits every 10 tasks
+- **Thought Pattern**: Graph + Memory Synthesis
+  - Query code graph for structural context
+  - Query memory for lessons learned
+  - Synthesize into actionable context map
+- Memory audits every 10 tasks or >500 lines
 
 **Tech Lead** (`tech-lead.md`) ⚠️ DEPRECATED
 - Legacy agent being phased out
