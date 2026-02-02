@@ -2,7 +2,7 @@
 description: Orchestrates implementation by delegating to engineers and managing gates.
 mode: subagent
 model: google/gemini-3-flash-preview
-maxSteps: 30
+maxSteps: 50
 tools:
   task: true
   bash: true
@@ -223,15 +223,23 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     2. **Resume:** IF plan file exists:
        - Read YAML frontmatter to get `status` and `current_stage`
        - IF `status` == "completed": Report completion and STOP.
-       - ELSE: **Skip to Stage 3** and resume at recorded `current_stage`.
+       - **Assess Completion:** Call `task("project-knowledge")` with:
+         ```xml
+         <query type="completion_check">
+           <task_doc>.opencode/plans/[feature].md</task_doc>
+           <request>Assess which tasks are complete vs pending. Check target files exist with expected implementations.</request>
+         </query>
+         ```
+       - Use response to determine which tasks to delegate next
+       - **Skip to Stage 3** and resume from first incomplete task.
     3. **Start:** IF no plan file exists, proceed to Stage 1.
   </stage>
 
   <stage id="1" name="Receive Design">
     1. **Parse:** Extract `<handoff>` XML from the caller.
     2. **Extract:** Complexity tier and Approval gate flag.
-    3. **Resume Check:** IF `<handoff type="resume">` AND `<plan><file>` provided:
-       - Read existing plan file
+    3. **Resume Check:** IF `<handoff type="resume">` AND `<task_doc>` provided:
+       - Read existing plan file from `<task_doc>` path
        - **Skip to Stage 3** (do NOT re-plan)
   </stage>
 

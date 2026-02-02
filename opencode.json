@@ -46,6 +46,16 @@
       "url": "https://gitmcp.io/RefactoringGuru/design-patterns-go",
       "enabled": true
     },
+    "ts-design-patterns": {
+      "type": "remote",
+      "url": "https://gitmcp.io/RefactoringGuru/design-patterns-typescript",
+      "enabled": true
+    },
+    "php-design-patterns": {
+      "type": "remote",
+      "url": "https://gitmcp.io/RefactoringGuru/design-patterns-php",
+      "enabled": true
+    },
     "filesystem": {
       "type": "local",
       "command": ["npx",

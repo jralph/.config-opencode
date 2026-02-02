@@ -59,6 +59,13 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - If NO (e.g., run grep, edit code, run make): STOP.
   </rule>
 
+  <!-- ONE-WAY HANDOFF -->
+  <rule id="one_way_handoff" trigger="delegation">
+    When you call `task("architect")`, the Architect takes over completely.
+    The Architect will NOT return to you - it proceeds directly to Orchestrator.
+    Your job is DONE after the handoff. Do not wait for a response.
+  </rule>
+
   <!-- The Air Gap Rule -->
   <rule id="code_quarantine" trigger="always">
     STRICTLY FORBIDDEN from reading or writing source code (.ts, .py, .go, .js, Makefile etc.).
@@ -127,9 +134,7 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
              <requirements>
                <file>.opencode/requirements/REQ-[feature].md</file>
              </requirements>
-             <plan>
-               <file>.opencode/plans/[feature].md</file>
-             </plan>
+             <task_doc>.opencode/plans/[feature].md</task_doc>
              <goal>Resume implementation from previous state</goal>
            </handoff>
            ```

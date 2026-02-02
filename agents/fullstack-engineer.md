@@ -48,8 +48,7 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <!-- PROTOCOL: FILE READING EFFICIENCY -->
   <rule id="file_efficiency" trigger="reading_files">
     Optimize file reading to reduce token usage:
-    - **1-2 files:** Use built-in `read`
-    - **3+ files:** Use `filesystem_read_multiple_files` (single call, batch read)
+    - **Files:** Always use built-in `read` (required for edit tracking)
   </rule>
 
   <!-- PROTOCOL: ATTACHED EXECUTION -->

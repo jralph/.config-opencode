@@ -22,6 +22,9 @@ tools:
   write: true
   edit: true
   read: true
+  go-design-patterns: true
+  ts-design-patterns: true
+  php-design-patterns: true
 permissions:
   bash: deny
   edit: allow
@@ -30,6 +33,8 @@ permissions:
     project-knowledge: allow
     staff-engineer: allow
     "*": deny
+skills:
+  - design-patterns-core
 ---
 
 # IDENTITY
@@ -44,8 +49,7 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <!-- PROTOCOL: FILE READING EFFICIENCY -->
   <rule id="file_efficiency" trigger="reading_files">
     Optimize file reading to reduce token usage:
-    - **1-2 files:** Use built-in `read`
-    - **3+ files:** Use `filesystem_read_multiple_files` (single call, batch read)
+    - **Files:** Always use built-in `read` (required for edit tracking)
     - **Project overview:** Use `filesystem_directory_tree` instead of multiple `list`/`glob`
     - **Large files:** Use `filesystem_get_file_info` first to check size
   </rule>
@@ -137,9 +141,11 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     5. **No Design File:** Trivial tasks skip design doc creation.
     
     **IF Standard:**
-    1. **Activate:** Use `design-architect` skill.
-    2. **Lightweight:** Write interface files if needed (types.ts / interface.go).
-    3. **Design:** Create `.opencode/designs/[feature].md` with YAML frontmatter:
+    1. **Activate:** Use `design-architect` and `design-patterns-core` skills.
+    2. **Patterns:** Identify applicable design patterns using skill guidance.
+       - Query language-specific MCP (go/ts/php-design-patterns) for examples if needed.
+    3. **Lightweight:** Write interface files if needed (types.ts / interface.go).
+    4. **Design:** Create `.opencode/designs/[feature].md` with YAML frontmatter:
        ```yaml
        ---
        feature: [feature-name]
@@ -151,17 +157,20 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        ```
        Then include:
        * Architecture approach
+       * **Design Patterns** (if applicable)
        * Interface contracts (if new)
        * Component interactions
        * Testing strategy
-    4. **Skip:** No full SoT ceremony needed.
+    5. **Skip:** No full SoT ceremony needed.
     
     **IF Complex:**
-    1. **Activate:** Use `design-architect` skill.
-    2. **Skeleton:** Write interface files FIRST (types.ts / interface.go).
+    1. **Activate:** Use `design-architect` and `design-patterns-core` skills.
+    2. **Patterns:** Identify applicable design patterns using skill guidance.
+       - Query language-specific MCP (go/ts/php-design-patterns) for examples.
+    3. **Skeleton:** Write interface files FIRST (types.ts / interface.go).
        *   *Constraint:* Do not implement logic. Define the Contract only.
-    3. **Verify:** Does the skeleton cover all requirements?
-    4. **Design:** Create `.opencode/designs/[feature].md` with YAML frontmatter:
+    4. **Verify:** Does the skeleton cover all requirements?
+    5. **Design:** Create `.opencode/designs/[feature].md` with YAML frontmatter:
        ```yaml
        ---
        feature: [feature-name]
@@ -173,11 +182,12 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        ```
        Then include:
        * Architecture decisions and rationale
+       * **Design Patterns** - Pattern name, where applied, rationale
        * Interface contracts
        * Component interactions
        * Security considerations
        * Testing strategy recommendations
-    5. **Reference:** Link to requirements and interface files.
+    6. **Reference:** Link to requirements and interface files.
   </stage>
 
   <stage id="3" name="Human Approval Gate (Conditional)">

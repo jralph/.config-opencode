@@ -36,10 +36,25 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <!-- PROTOCOL: FILE READING EFFICIENCY -->
 **File Reading Optimization:**
-- **1-2 files:** Use built-in `read`
-- **3+ files:** Use `filesystem_read_multiple_files` (single call, batch read)
+- **Files:** Always use built-in `read` (required for edit tracking)
 - **Project overview:** Use `filesystem_directory_tree` instead of multiple `list`/`glob`
 - **File metadata:** Use `filesystem_get_file_info` to check sizes before reading
+
+# PROTOCOL: COMPLETION CHECK (For Orchestrator Resume)
+When called with `<query type="completion_check">`:
+1. **Read Task Doc:** Parse the task list from the provided `<task_doc>`.
+2. **Check Each Task:** For each task, use `codegraphcontext` or `glob` to verify:
+   - Target files exist
+   - Expected functions/components are implemented
+3. **Return Status:**
+   ```
+   ## Task Completion Status
+   - [Task 1] ✓ Complete - src/auth.ts exists with login()
+   - [Task 1.1] ✓ Complete - validation added
+   - [Task 2] ✗ Pending - src/api.ts missing
+   
+   **Resume from:** Task 2
+   ```
 
 # PROTOCOL: HEALTH CHECK (Status)
 When asked for a "Status Check" or "Health Check":
