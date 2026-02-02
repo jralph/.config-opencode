@@ -62,6 +62,49 @@ You are an expert in Go, microservices architecture, and clean backend developme
 - Use **log correlation** by injecting trace IDs into structured logs.
 - Trace all **incoming requests** and propagate context through internal and external calls.
 
+## Design Patterns
+
+Use an established design pattern to help maintainability and understanding of code.
+
+Use the `design-patterns-go` mcp to access details and examples of any of the below patterns.
+
+ALWAYS consider what design pattern(s) are currently in use to help with single responsibility.
+
+### Creational Patterns
+
+These patterns provide various object creation mechanisms, which increase flexibility and reuse of existing code.
+
+- Factory Method
+- Abstract Factory
+- Builder
+- Prototype
+- Singleton
+
+### Structural Patterns
+
+These patterns explain how to assemble objects and classes into larger structures while keeping these structures flexible and efficient.
+
+- Adapter
+- Bridge
+- Composite
+- Decorator
+- Facade
+- Flyweight
+- Proxy
+
+### Behavorial Patterns
+
+- Chain of Responsibility
+- Command
+- Iterator
+- Mediator
+- Memento
+- Observer
+- State
+- Strategy
+- Template Method
+- Visitor
+
 ## Linting and Quality (golangci-lint)
 
 ### Core Philosophy

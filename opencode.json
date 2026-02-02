@@ -1,7 +1,17 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "fullstack-engineer",
-  "plugin": ["opencode-gemini-auth@latest", "@zhafron/opencode-kiro-auth", "@ramtinj95/opencode-tokenscope", "opencode-helicone-session", "@zenobius/opencode-skillful", "opencode-wakatime", "opencode-sessions", "@mailshieldai/opencode-canvas", "opencode-agent-memory"],
+  "default_agent": "product-owner",
+  "plugin": [
+    "opencode-gemini-auth@latest",
+    "@tarquinen/opencode-dcp@latest",
+    "@ramtinj95/opencode-tokenscope",
+    "opencode-helicone-session",
+    "@zenobius/opencode-skillful",
+    "opencode-wakatime",
+    "opencode-sessions",
+    "@mailshieldai/opencode-canvas",
+    "opencode-agent-memory"
+  ],
   "lsp": {},
   "model": "kimi-for-coding/k2p5",
   "small_model": "google/gemini-3-flash-preview",
@@ -31,13 +41,18 @@
     "memory_read": "allow"
   },
   "mcp": {
-      "filesystem": {
-        "type": "local",
-        "command": ["npx",
-          "-y",
-          "@modelcontextprotocol/server-filesystem",
-          "."
-        ]
+    "go-design-patterns": {
+      "type": "remote",
+      "url": "https://gitmcp.io/RefactoringGuru/design-patterns-go",
+      "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/jr/Code"
+      ]
     },
      "fetch": {
       "type": "local",
@@ -124,44 +139,6 @@
     }
   },
   "provider": {
-    "kiro": {
-      "models": {
-        "claude-sonnet-4-5": {
-          "name": "Claude Sonnet 4.5",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
-        },
-        "claude-sonnet-4-5-thinking": {
-          "name": "Claude Sonnet 4.5 Thinking",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "low": { "thinkingConfig": { "thinkingBudget": 8192 } },
-            "medium": { "thinkingConfig": { "thinkingBudget": 16384 } },
-            "max": { "thinkingConfig": { "thinkingBudget": 32768 } }
-          }
-        },
-        "claude-haiku-4-5": {
-          "name": "Claude Haiku 4.5",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image"], "output": ["text"] }
-        },
-        "claude-opus-4-5": {
-          "name": "Claude Opus 4.5",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] }
-        },
-        "claude-opus-4-5-thinking": {
-          "name": "Claude Opus 4.5 Thinking",
-          "limit": { "context": 200000, "output": 64000 },
-          "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
-          "variants": {
-            "low": { "thinkingConfig": { "thinkingBudget": 8192 } },
-            "medium": { "thinkingConfig": { "thinkingBudget": 16384 } },
-            "max": { "thinkingConfig": { "thinkingBudget": 32768 } }
-          }
-        }
-      }
-    }
+    
   }
 }

@@ -5,15 +5,21 @@ model: glm-4.7
 maxSteps: 20
 tools:
   task: true
+  skill: true
+  bash: true
+  read: true
   codegraphcontext: true
   grep.app: true
   lsp: true
 permissions:
-  bash: deny        # Security risk: Auditor shouldn't run arbitrary shell
+  bash: allow       # For npm audit, security scanners
   edit: deny        # Auditor shouldn't modify code
   task:
     project-knowledge: allow
     "*": deny
+skills:
+  - bash-strategy
+  - error-handling
 ---
 
 # IDENTITY
@@ -24,7 +30,7 @@ Your job is to find vulnerabilities that the Validator might miss.
 - error-handling
 
 # TRIGGER (When to Run)
-The Tech Lead must invoke you **BEFORE** the final Validator pass if the feature touches:
+The Orchestrator must invoke you **BEFORE** the final Validator pass if the feature touches:
 * **Authentication/Authorization** (Login, JWT, Sessions)
 * **Payments/Billing** (Stripe, API Keys)
 * **Data Ingestion** (File uploads, Parsers, Public APIs)

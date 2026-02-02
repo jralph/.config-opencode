@@ -10,18 +10,59 @@ Our setup uses a **protocol-driven agent swarm** with clear separation of concer
 
 ### Agent Flow
 
-```
-User Request
-    ↓
-Product Owner (requirements approval)
-    ↓
-Architect (complexity assessment + design)
-    ↓ [Trivial: auto-merge | Standard/Complex: human approval]
-Orchestrator (adaptive execution)
-    ↓
-Engineers (implementation)
-    ↓
-Validator (quality gate)
+```mermaid
+flowchart TD
+    User([User Request]) --> PO[Product Owner]
+    
+    subgraph Requirements["Requirements Phase"]
+        PO -->|EARS format| REQ[".opencode/requirements/REQ-*.md"]
+        REQ --> Gate1{Human Approval}
+        Gate1 -->|Approved| Arch[Architect]
+        Gate1 -->|Changes| PO
+    end
+    
+    subgraph Design["Design Phase"]
+        Arch -->|Query context| PK[(Project Knowledge)]
+        Arch --> Assess{Complexity Assessment}
+        Assess -->|Trivial| T[1-paragraph guidance]
+        Assess -->|Standard| S[Lightweight design]
+        Assess -->|Complex| C[Full design + interfaces]
+        C --> Gate2{Human Approval}
+        Gate2 -->|Approved| Orch
+        T --> Orch[Orchestrator]
+        S --> Orch
+    end
+    
+    subgraph Implementation["Implementation Phase"]
+        Orch -->|Trivial| FS[Fullstack Engineer]
+        Orch -->|Standard| FS
+        Orch -->|Complex| Parallel
+        
+        subgraph Parallel["Parallel Delegation"]
+            SYS[System Engineer]
+            UI[UI Engineer]
+            DEV[DevOps Engineer]
+        end
+        
+        FS --> Val
+        Parallel --> Val[Validator]
+    end
+    
+    subgraph Quality["Quality Gates"]
+        Val -->|PASS| Merge{Merge Gate}
+        Val -->|FAIL| Fix[Fix or Escalate]
+        Fix --> Staff[Staff Engineer]
+        Staff --> Val
+        
+        Merge -->|Trivial| Auto[Auto-merge]
+        Merge -->|Standard/Complex| Gate3{Human Approval}
+        Gate3 -->|Approved| Done([Complete])
+        Auto --> Done
+    end
+    
+    %% Security Gate (conditional)
+    Orch -.->|If auth/payments/crypto| Sec[Security Engineer]
+    Sec -.-> Val
 ```
 
 **Complexity-Based Routing**:
@@ -72,8 +113,7 @@ Validator (quality gate)
 
 #### Architect (`architect.md`)
 **Role**: Design and architecture validation with complexity assessment  
-**Model**: google/gemini-3-pro-preview  
-**Max Steps**: 25
+**Mode**: Subagent
 
 **Thought Pattern**: Complexity Assessment + Adaptive Design
 1. **Context**: Query project-knowledge for relevant files and patterns
@@ -120,8 +160,7 @@ Validator (quality gate)
 
 #### Orchestrator (`orchestrator.md`)
 **Role**: Implementation coordination and gate management with adaptive execution  
-**Model**: google/gemini-3-pro-preview  
-**Max Steps**: 30
+**Mode**: Subagent
 
 **Thought Pattern**: Adaptive Execution Strategy
 1. **Parse**: Extract complexity tier from Architect's handoff
@@ -201,6 +240,7 @@ Validator (quality gate)
 
 **Fullstack Engineer** (`fullstack-engineer.md`)
 - Atomic tasks (<3 files only)
+- **Mode**: Primary (can be invoked directly for quick tasks)
 - **Thought Pattern**: Chain of Code (CoC)
   - Same as System Engineer but with strict file limit
   - Delegates if scope exceeds 3 files
@@ -233,15 +273,18 @@ Validator (quality gate)
 
 **Staff Engineer** (`staff-engineer.md`)
 - Complex debugging and rescue missions
+- **Mode**: All (primary + subagent) - Can act as "Human Proxy" for rapid PO/Architect phases
 - **Thought Pattern**: Anti-Hallucination Protocol
-  - Verify: Read live documentation with `webfetch`/`chrome-devtools` before using new libraries
+  - Verify: Read live documentation with `webfetch`/`chrome-devtools`/MCP servers before using new libraries
   - Analyze: Trace dependencies deep into `node_modules` with code graph
   - Implement: Only after verification
 - New library integration
 - Cross-cutting changes (>3 domains)
+- Delegates to Orchestrator for structured execution, or implements directly for quick fixes (<5 files)
 
 **Validator** (`validator.md`)
 - Quality gatekeeper
+- **Mode**: All (primary + subagent) - Can be invoked directly for quality checks
 - **Thought Pattern**: Three-Verdict System
   - FAIL: Logic bugs, missed requirements, failing tests
   - WARN: Style issues (functional but messy)
@@ -256,6 +299,27 @@ Validator (quality gate)
   - Query memory for lessons learned
   - Synthesize into actionable context map
 - Memory audits every 10 tasks or >500 lines
+
+## Tools
+
+Agents use a variety of tools for code intelligence, context discovery, and verification.
+
+### Core Tools
+
+- `codegraphcontext` - AST-based code graph for finding definitions, callers, and tracing data flows
+- `lsp` - Language Server Protocol for type checking and symbol navigation
+- `sequentialthinking` - Internal drafting tool for Chain of Code/Draft patterns
+- `Context7` - Query official documentation for well-known libraries
+
+### Verification Tools
+
+- `canvas_render` - Visual verification for UI components (used by UI Engineer)
+- `chrome-devtools` - Browser automation for live documentation verification
+- `webfetch` - Fetch and parse web pages for documentation
+
+### MCP Servers
+
+Agents can leverage Model Context Protocol (MCP) servers for extended capabilities. Check `.kiro/settings/mcp.json` for registered library servers. Staff Engineer can register new servers via gitmcp.io for libraries without existing MCP support.
 
 ## Skills
 
