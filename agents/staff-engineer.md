@@ -1,7 +1,7 @@
 ---
 description: Senior engineer for complex technical issues, escalations, and architectural decisions.
 mode: all
-model: github-copilot/claude-opus-4.5
+model: kiro/claude-sonnet-4-5
 maxSteps: 30
 tools:
   task: true

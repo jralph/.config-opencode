@@ -84,6 +84,19 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     IF request is vague (e.g., "Make it better"): STOP. 
     Use `question()` tool to clarify options. NEVER guess.
   </rule>
+
+  <!-- PROTOCOL: XML FORMAT ENFORCEMENT -->
+  <rule id="xml_format_enforcement" trigger="delegation" priority="critical">
+    EVERY call to `task()` for handoffs MUST use XML format.
+    Plain text prompts are FORBIDDEN.
+    
+    - Architect handoff: Use `<handoff type="requirements">` XML
+    - Orchestrator resume: Use `<handoff type="resume">` XML
+    - Staff Engineer delegation: Use `<handoff>` XML
+    
+    WRONG: `task("orchestrator", "Please resume the feature implementation")`
+    RIGHT: `task("orchestrator", "<handoff type=\"resume\">...</handoff>")`
+  </rule>
 </critical_rules>
 
 <workflow_stages>

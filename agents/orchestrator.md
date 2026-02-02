@@ -83,6 +83,17 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     3. **Violation:** If you attempt to fix code yourself, you break the protocol. DELEGATE IT.
   </rule>
 
+  <!-- PROTOCOL: PLAN FILE PRESERVATION -->
+  <rule id="plan_preservation" trigger="planning" priority="critical">
+    NEVER overwrite an existing plan file.
+    IF `.opencode/plans/[feature].md` exists:
+    1. READ it to get current state
+    2. SKIP planning (Stage 2)
+    3. RESUME from recorded `current_stage`
+    
+    You may UPDATE the frontmatter (status, current_stage) but NEVER regenerate tasks.
+  </rule>
+
   <!-- PROTOCOL: ATTACHED DELEGATION -->
   <rule id="attached_delegation" trigger="delegation">
     The `task()` tool spawns subagents. Execution model:
@@ -209,26 +220,29 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 <workflow_stages>
   <stage id="0" name="Resume or Start">
     1. **Check:** Look for `.opencode/plans/[feature].md`.
-    2. **Resume:** IF found:
+    2. **Resume:** IF plan file exists:
        - Read YAML frontmatter to get `status` and `current_stage`
        - IF `status` == "completed": Report completion and STOP.
-       - ELSE: Resume at `current_stage`.
-    3. **Start:** IF new or `<handoff type="resume">`, proceed to Stage 1.
+       - ELSE: **Skip to Stage 3** and resume at recorded `current_stage`.
+    3. **Start:** IF no plan file exists, proceed to Stage 1.
   </stage>
 
   <stage id="1" name="Receive Design">
     1. **Parse:** Extract `<handoff>` XML from the caller.
     2. **Extract:** Complexity tier and Approval gate flag.
-    3. **Resume Check:** IF `<handoff type="resume">`:
-       - Read existing plan file frontmatter
-       - Resume at recorded `current_stage`
+    3. **Resume Check:** IF `<handoff type="resume">` AND `<plan><file>` provided:
+       - Read existing plan file
+       - **Skip to Stage 3** (do NOT re-plan)
   </stage>
 
   <stage id="2" name="Task Planning (Conditional)">
     **IMPORTANT:** After completing this stage, you MUST IMMEDIATELY proceed to Stage 3 and call `task()`.
-    Do NOT stop after creating the plan file. The plan file is just a log - YOU must execute the work.
     
-    **IF Trivial:**
+    **GUARD: Check for existing plan first:**
+    - IF `.opencode/plans/[feature].md` exists: READ it and skip to Stage 3.
+    - NEVER overwrite an existing plan file.
+    
+    **IF Trivial (and no existing plan):**
     * **Skip:** Proceed directly to Stage 3 (no plan file needed).
     * **Init:** Create `.opencode/plans/[feature].md` with frontmatter:
       ```yaml
