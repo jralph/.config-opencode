@@ -25,7 +25,7 @@ permissions:
 skills:
   - dependency-management
   - golang-expert
-  - error-handling
+  - error-handling-core
 ---
 
 # IDENTITY
@@ -38,6 +38,23 @@ You operate as an **ATTACHED SUB-AGENT**. You must report back to the Orchestrat
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: TODO TRACKING -->
+  <rule id="todo_tracking" trigger="task_start">
+    Use `todowrite` to track your assigned tasks. Prevents forgetting steps.
+    1. **On Start:** Parse tasks from `<task>` XML, write each as a todo item
+    2. **On Progress:** Mark items complete as you finish them
+    3. **On Finish:** Use `todoread` to verify all items complete before returning
+    
+    Example:
+    ```
+    todowrite([
+      { id: "1", content: "Implement getUserById function", status: "in_progress" },
+      { id: "1.1", content: "Add input validation", status: "pending" },
+      { id: "1.2", content: "Add error handling", status: "pending" }
+    ])
+    ```
+  </rule>
+
   <!-- PROTOCOL: FILE READING EFFICIENCY -->
   <rule id="file_efficiency" trigger="reading_files">
     Optimize file reading to reduce token usage:
@@ -74,8 +91,10 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     BEFORE implementation, load relevant skills using the skill tool:
     1. **Always Load:**
        * skill("coding-guidelines") - Best practices
-       * skill("error-handling") - Error handling patterns (always for code work)
-    2. **Conditional Load:**
+    2. **Language-Specific Error Handling (load based on file types):**
+       * Go files (*.go): skill("error-handling-go")
+       * TypeScript/JavaScript (*.ts, *.js): skill("error-handling-ts")
+    3. **Conditional Load:**
        * skill("bash-strategy") - Before running shell commands
        * skill("golang-expert") - When working with Go files (*.go)
        * skill("code-style-analyst") - For style consistency analysis when working with (*.go, *.js, *.ts)
@@ -129,7 +148,21 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   </stage>
   
   <stage id="3" name="Validate & Return">
-    1. **Call:** `task("validator")`.
+    1. **Call Validator** with context:
+       ```xml
+       <validation>
+         <scope>
+           <requirements_doc>[from task XML]</requirements_doc>
+           <design_doc>[from task XML]</design_doc>
+           <task_doc>[from task XML]</task_doc>
+           <tasks_completed>[task numbers you implemented]</tasks_completed>
+         </scope>
+         <files>
+           <file>[files you modified]</file>
+         </files>
+       </validation>
+       ```
+       Call: `task("validator", validation_xml)`
     2. **Check:** If Validator passes, Return "SUCCESS".
     3. **Fail:** If Validator fails, fix or Return "FAILURE: [Reason]".
   </stage>

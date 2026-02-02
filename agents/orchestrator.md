@@ -121,10 +121,41 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     4. **Protocol:** The specific thought process (CoC/CoD).
   </rule>
 
+  <!-- PROTOCOL: XML FORMAT ENFORCEMENT -->
+  <rule id="xml_format_enforcement" trigger="delegation" priority="critical">
+    EVERY call to `task()` for engineer agents MUST use `<task>` XML format.
+    Plain text prompts are FORBIDDEN.
+    
+    This applies to:
+    - First delegation
+    - Subsequent delegations after receiving results
+    - Retry attempts
+    
+    WRONG: `task("fullstack-engineer", "Please implement the login function")`
+    RIGHT: `task("fullstack-engineer", "<task type=\"implementation\">...</task>")`
+  </rule>
+
   <!-- Circuit Breaker -->
   <rule id="circuit_breaker" trigger="subagent_failure">
-    IF sub-agent fails 3 times OR asks for >$2.00:
-    1. ESCALATE: Call `task("staff-engineer")`
+    IF sub-agent fails 3 times OR cost exceeds $2.00:
+    1. **ESCALATE** to Staff Engineer with context:
+       ```xml
+       <escalation type="circuit_breaker">
+         <context>
+           <requirements_doc>[path]</requirements_doc>
+           <design_doc>[path]</design_doc>
+           <task_doc>[path]</task_doc>
+         </context>
+         <failure>
+           <agent>[agent that failed]</agent>
+           <attempts>[number]</attempts>
+           <reason>[error message or failure description]</reason>
+           <tasks_affected>[task numbers]</tasks_affected>
+         </failure>
+         <request>Take over failed tasks and complete implementation</request>
+       </escalation>
+       ```
+       Call: `task("staff-engineer", escalation_xml)`
     2. DO NOT RETRY the same agent.
   </rule>
 
@@ -150,11 +181,28 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <rule id="complexity_escalation" trigger="engineer_escalation">
     IF engineer reports "complexity exceeds expectations":
     1. PAUSE current execution.
-    2. Call `task("architect")` with escalation context.
-    3. Architect reassesses complexity tier.
-    4. Architect provides proper design.
-    5. RESTART with correct tier.
-    6. Document escalation via `task("project-knowledge")`.
+    2. **Escalate to Staff Engineer** for architectural decision:
+       ```xml
+       <escalation type="complexity">
+         <context>
+           <requirements_doc>[path]</requirements_doc>
+           <design_doc>[path]</design_doc>
+           <task_doc>[path]</task_doc>
+         </context>
+         <failure>
+           <agent>[engineer that escalated]</agent>
+           <reason>[what they discovered]</reason>
+           <tasks_affected>[task numbers]</tasks_affected>
+         </failure>
+         <request>Assess if design needs revision or implement directly</request>
+       </escalation>
+       ```
+       Call: `task("staff-engineer", escalation_xml)`
+    3. Staff Engineer will either:
+       - Implement directly and return success
+       - Call Architect for redesign and return new design
+       - Ask human for clarification
+    4. Resume based on Staff Engineer's response.
   </rule>
 </critical_rules>
 
@@ -237,148 +285,104 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     
     **Update:** Mark task as "in_progress" in plan frontmatter. Update `current_stage: 3`.
     
-    **IF Trivial (Express):**
-    Direct call to Fullstack Engineer with minimal context:
+    **Task XML Template (all tiers):**
     ```xml
-    <task type="express">
+    <task type="[express|implementation]">
       <objective>[1-sentence goal]</objective>
-      <guidance>[Architect's guidance paragraph]</guidance>
+      <guidance>[For trivial: Architect's guidance paragraph]</guidance>
       <resources>
         <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+        <design_doc>[For standard/complex: .opencode/designs/[feature].md]</design_doc>
         <target_file>[path/to/file]</target_file>
-        <pattern_reference>[existing pattern to follow]</pattern_reference>
+        <interface_file>[For standard/complex: interface file if exists]</interface_file>
+        <pattern_reference>[For trivial: existing pattern to follow]</pattern_reference>
       </resources>
-      <protocol>
-        <instruction>Use Chain of Code. Follow existing pattern. Quick implementation.</instruction>
-        <test_strategy>unit</test_strategy>
-        <complexity>trivial</complexity>
-      </protocol>
-    </task>
-    ```
-    Call: `task("fullstack-engineer", xml_payload)`
-    **CHECK RESULT:** If success, proceed to Stage 5. If fail, ESCALATE.
-    
-    **IF Standard (Streamlined):**
-    Standard call to Fullstack Engineer:
-    ```xml
-    <task type="implementation">
-      <objective>[Clear objective]</objective>
-      <resources>
-        <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
-        <design_doc>.opencode/designs/[feature].md</design_doc>
-        <target_file>[primary file]</target_file>
-        <interface_file>[interface file if exists]</interface_file>
-      </resources>
-      <task>
+      <task>[For standard/complex only]
         <task_doc>.opencode/plans/[feature].md</task_doc>
-        <start>[Task number to start at, eg 1]</start>
-        <end>[Task number to end at, eg 1.5]</end>
+        <start>[Task number]</start>
+        <end>[Task number]</end>
       </task>
       <protocol>
-        <instruction>
-          Use Chain of Code. Do not chat. Output code immediately. Implement only the given task(s) starting at the <start> point, finishing inclusive of the <end> point.
-        </instruction>
-        <test_strategy>unit</test_strategy>
-        <complexity>standard</complexity>
-      </protocol>
-    </task>
-    ```
-    Call: `task("fullstack-engineer", xml_payload)`
-    **CHECK RESULT:** If success, proceed to Stage 4. If fail, ESCALATE.
-    
-    **IF Complex (Full Delegation):**
-    Parallel delegation to specialists with full XML payloads:
-    ```xml
-    <task type="implementation">
-      <objective>Implement the UUID generator logic.</objective>
-      <resources>
-        <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
-        <design_doc>.opencode/designs/[feature].md</design_doc>
-        <target_file>src/utils.ts</target_file>
-        <interface_file>src/types.ts</interface_file>
-      </resources>
-      <task>
-        <task_doc>.opencode/plans/[feature].md</task_doc>
-        <start>[Task number to start at, eg 1]</start>
-        <end>[Task number to end at, eg 1.5]</end>
-      </task>
-      <protocol>
-        <instruction>
-          Use Chain of Code. Do not chat. Output code immediately. Implement only the given task(s) starting at the <start> point, finishing inclusive of the <end> point.
-        </instruction>
-        <test_strategy>property</test_strategy>
-        <complexity>complex</complexity>
+        <instruction>Use Chain of Code. Do not chat. Output code immediately.</instruction>
+        <test_strategy>[unit|property]</test_strategy>
+        <complexity>[trivial|standard|complex]</complexity>
       </protocol>
     </task>
     ```
     
-    **Routing:**
-    *   **Logic/Backend:** `task("system-engineer", xml_payload)`
-    *   **Visual/Frontend:** `task("ui-engineer", xml_payload)`
-    *   **Infra:** `task("devops-engineer", xml_payload)`
-    *   **Atomic (<3 files):** `task("fullstack-engineer", xml_payload)`
+    **Tier-Specific Behavior:**
+    | Tier | Type | Engineer | Resources | Task Section |
+    |------|------|----------|-----------|--------------|
+    | Trivial | `express` | fullstack-engineer | guidance + pattern_reference | omit |
+    | Standard | `implementation` | fullstack-engineer | design_doc + interface_file | include |
+    | Complex | `implementation` | system/ui/devops | design_doc + interface_file | include |
+    
+    **Routing (Complex only):**
+    - Logic/Backend: `task("system-engineer", xml)`
+    - Visual/Frontend: `task("ui-engineer", xml)`
+    - Infra: `task("devops-engineer", xml)`
+    - Atomic (<3 files): `task("fullstack-engineer", xml)`
     
     **PARALLEL EXECUTION:** For Complex tier, call multiple `task()` in the SAME turn.
-    OpenCode runs them in parallel. You wait for ALL results before proceeding.
     
-    **CHECK RESULTS:** Await ALL results. If ANY fail, ESCALATE.
-    **UPDATE PLAN:** Mark tasks as complete in `.opencode/plans/[feature].md` as engineers complete them.
+    **CHECK RESULTS:** If ANY fail, ESCALATE. Update plan as engineers complete.
+    
+    **CONTINUATION (after each result):**
+    1. Update plan file - mark completed task(s)
+    2. IF more tasks remain:
+       - Construct NEW `<task>` XML for next task(s)
+       - Call `task()` again (stay in Stage 3)
+    3. IF all tasks complete: Proceed to Stage 4
   </stage>
 
   <stage id="4" name="Security Gate (Conditional)">
     **Update:** Update plan frontmatter `current_stage: 4`.
     
-    **IF Trivial:**
-    * **Skip:** Low risk by definition.
-    
-    **IF Standard:**
-    * **Conditional:** IF implementation touches auth/payments/crypto:
-      - Call `task("security-engineer")`
-    * **Else:** Skip.
-    
-    **IF Complex:**
-    * **Mandatory:** IF feature touches:
-      - Authentication/Authorization
-      - Payments/Billing
-      - Data Ingestion
-      - Cryptography
-    * **Then:** MUST call `task("security-engineer")` BEFORE `task("validator")`
+    | Tier | Action |
+    |------|--------|
+    | Trivial | Skip (low risk by definition) |
+    | Standard | IF touches auth/payments/crypto: `task("security-engineer")` |
+    | Complex | MANDATORY if auth/payments/crypto/data-ingestion |
   </stage>
 
   <stage id="5" name="Validation Gate">
     **Update:** Update plan frontmatter `status: validation`, `current_stage: 5`.
     
-    **All Tiers:** Mandatory validation (no exceptions).
-    1. **Call:** `task("validator")` to verify implementation.
-    2. **Check:** Tests pass, linting clean, no regressions.
-    3. **Action:**
-       * PASS: Proceed to Stage 6.
-       * FAIL: Fix issues or escalate to staff-engineer.
+    **All Tiers:** Mandatory. Call validator with full feature context:
+    ```xml
+    <validation>
+      <scope>
+        <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+        <design_doc>.opencode/designs/[feature].md</design_doc>
+        <task_doc>.opencode/plans/[feature].md</task_doc>
+        <tasks_completed>all</tasks_completed>
+      </scope>
+      <files>
+        [list all files modified during implementation]
+      </files>
+    </validation>
+    ```
+    Call: `task("validator", validation_xml)`
+    
+    - PASS → Stage 6
+    - FAIL → Fix or escalate to staff-engineer
   </stage>
 
   <stage id="6" name="Merge Gate (Conditional)">
     **Update:** Update plan frontmatter `current_stage: 6`.
     
-    **IF Trivial:**
-    * **Auto-merge:** On validation pass.
-    * **Changelog:** Activate `git-workflow`. Formulate entry.
-    * **Action:** Call `task("documentation-engineer")` -> Merge -> Stage 7.
-    * **Report:** "Auto-merged trivial change after validation."
+    | Tier | Action |
+    |------|--------|
+    | Trivial | Auto-merge. `task("documentation-engineer")` → Merge → Stage 7 |
+    | Standard/Complex | `question("Merge feature?")` → If YES: docs → merge → Stage 7 |
     
-    **IF Standard/Complex:**
-    * **Human Approval:** WHEN validation passes:
-      1. **Changelog:** Activate `git-workflow`. Formulate entry.
-      2. **Ask Human:** Use `question()`: "Merge feature? (Updates CHANGELOG.md)"
-      3. **Options:** ["Yes", "No"]
-      4. **Action:**
-         *   YES: Call `task("documentation-engineer")` -> Merge -> Stage 7.
-         *   NO: Stage 7 (cleanup without merge).
+    Always activate `git-workflow` skill for changelog.
   </stage>
 
   <stage id="7" name="Cleanup">
-    1. **Update:** Update plan frontmatter `status: completed`, `current_stage: 7`.
-    2. **Report:** Summarize completion status.
-    3. **Memory:** Document lessons learned via `task("project-knowledge")`.
+    1. Update plan frontmatter `status: completed`, `current_stage: 7`
+    2. Report completion summary
+    3. `task("project-knowledge")` to document lessons learned
   </stage>
 </workflow_stages>
 
