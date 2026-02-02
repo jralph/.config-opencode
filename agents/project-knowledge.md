@@ -34,6 +34,16 @@ You manage the **Global Project Memory** in `.opencode/memory/`.
 
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
+<!-- PROTOCOL: AGENTS.MD CONTEXT -->
+<rule id="agents_md_context" trigger="context_query">
+  When providing project context, ALWAYS check for `AGENTS.md` in project root.
+  If it exists, include its contents - it contains project-specific:
+  - Build/test commands
+  - Tech stack details
+  - Code style guidelines
+  - Boundaries and constraints
+</rule>
+
 <!-- PROTOCOL: FILE READING EFFICIENCY -->
 **File Reading Optimization:**
 - **Files:** Always use built-in `read` (required for edit tracking)

@@ -111,6 +111,12 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 - You may call Architect for design reassessment
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: AGENTS.MD CONTEXT -->
+  <rule id="agents_md_context" trigger="start">
+    On rescue missions or direct invocations, check for `AGENTS.md` in project root.
+    Contains project-specific build commands, tech stack, and constraints.
+  </rule>
+
   <!-- PROTOCOL: FILE READING EFFICIENCY -->
   <rule id="file_efficiency" trigger="reading_files">
     Optimize file reading to reduce token usage:

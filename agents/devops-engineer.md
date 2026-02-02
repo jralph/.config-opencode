@@ -46,6 +46,14 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     3. **On Finish:** Use `todoread` to verify all items complete before returning
   </rule>
 
+  <!-- PROTOCOL: TEST EXECUTION -->
+  <rule id="test_execution" trigger="running_tests">
+    Prefer Makefile targets over language-specific test commands.
+    - **Use:** `make test`, `make test-full`, `make bench`
+    - **Avoid:** Raw `go test`, `npm test`, `pytest` unless no Makefile exists
+    - **Reason:** Makefile handles environment setup, paths, and dependencies
+  </rule>
+
   <!-- PROTOCOL: ATTACHED EXECUTION -->
   <rule id="attached_execution" trigger="always">
     1. **Blocking:** The Orchestrator is waiting for you. Do not "fire and forget".

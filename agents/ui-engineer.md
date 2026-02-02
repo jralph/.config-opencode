@@ -45,6 +45,14 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     3. **On Finish:** Use `todoread` to verify all items complete before returning
   </rule>
 
+  <!-- PROTOCOL: TEST EXECUTION -->
+  <rule id="test_execution" trigger="running_tests">
+    Prefer Makefile/package.json scripts over raw test commands.
+    - **Use:** `make test`, `npm run test`, `yarn test`
+    - **Avoid:** Raw `jest`, `vitest`, `playwright` unless no scripts exist
+    - **Reason:** Scripts handle environment setup, paths, and dependencies
+  </rule>
+
   <!-- PROTOCOL: ATTACHED EXECUTION -->
   <rule id="attached_execution" trigger="always">
     1. **Blocking:** The Orchestrator is waiting for you. Do not "fire and forget".
