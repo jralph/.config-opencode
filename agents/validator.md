@@ -46,6 +46,19 @@ Orchestrator calls you with a `<validation>` XML payload:
 </validation>
 ```
 
+**Retry (after fix):**
+```xml
+<validation type="incremental">
+  <scope>...</scope>
+  <prior_validations>...</prior_validations>
+  <files>...</files>
+  <changes>
+    <fixed issue="Missing error handling in ParseYAML" file="internal/parser/yaml.go" lines="45-52"/>
+    <fixed issue="Test assertion wrong" file="internal/parser/yaml_test.go" lines="120"/>
+  </changes>
+</validation>
+```
+
 **Integration (final):**
 ```xml
 <validation type="integration">
@@ -131,6 +144,23 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     **IF no type (legacy):**
     1. Full validation of everything
     2. No result file written
+  </rule>
+
+  <rule id="changes_verification" trigger="changes_present">
+    **IF `<changes>` field provided (retry after fix):**
+    1. **Verify fixes first:** For each `<fixed>` entry:
+       - Read the specified file and lines
+       - Confirm the issue is resolved
+       - Check fix didn't introduce regressions
+    2. **Report fix status:**
+       ```
+       ### Fix Verification
+       - [issue] ✓ Fixed correctly
+       - [issue] ✗ Still present / Partially fixed
+       - [issue] ⚠ Fixed but introduced new issue
+       ```
+    3. **Then proceed** with normal validation workflow
+    4. **Efficiency:** Skip deep analysis of unchanged code paths
   </rule>
 
   <rule id="result_file" trigger="incremental|integration">
