@@ -39,6 +39,7 @@ skills:
   - dependency-management
   - code-style-analyst
   - coding-guidelines
+  - powershell-expert
   - testing-standards
   - golang-expert
   - error-handling-core
