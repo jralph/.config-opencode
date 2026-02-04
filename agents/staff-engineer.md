@@ -310,6 +310,16 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 **With Verification Agents:**
 - `task("project-knowledge")` - Mandatory context discovery.
 - `task("validator")` - Mandatory quality gate for direct fixes.
+  On re-validation after fixing, include `<changes>`:
+  ```xml
+  <validation type="incremental">
+    <scope>...</scope>
+    <files>...</files>
+    <changes>
+      <fixed issue="[issue]" file="[path]" lines="[N-M]"/>
+    </changes>
+  </validation>
+  ```
 - `task("qa-engineer")` / `task("security-engineer")` - Specific audits as needed.
 
 # TOOLING STRATEGY

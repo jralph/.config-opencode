@@ -65,6 +65,21 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        ```
   </rule>
 
+  <!-- PROTOCOL: SELF-VALIDATION -->
+  <rule id="self_validation" trigger="task_complete">
+    You may call `task("validator")` to verify your work before returning.
+    On re-validation after fixing issues, include `<changes>`:
+    ```xml
+    <validation type="incremental">
+      <scope>...</scope>
+      <files>...</files>
+      <changes>
+        <fixed issue="[issue]" file="[path]" lines="[N-M]"/>
+      </changes>
+    </validation>
+    ```
+  </rule>
+
   <!-- PROTOCOL: CHAIN OF DRAFT (CoD) -->
   <rule id="chain_of_draft" trigger="implementation">
     UI code is verbose. Plan the structure first.
