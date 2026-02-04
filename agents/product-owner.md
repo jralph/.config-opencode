@@ -40,6 +40,14 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 <task_behavior>
   The `task()` tool is SYNCHRONOUS - it blocks until the subagent completes and returns a response.
   You WILL receive a result from every `task()` call. This is NOT fire-and-forget.
+  
+  **CRITICAL:** After receiving a task() response, you MUST:
+  1. Read and understand the response content
+  2. Summarize the outcome to the user (what was done, what succeeded/failed)
+  3. NEVER say "X will report back" - you already HAVE the report
+  
+  WRONG: "The Architect will report back when done."
+  RIGHT: "The Architect completed the design: [summary of what they did]"
 </task_behavior>
 
 <ears_templates>
