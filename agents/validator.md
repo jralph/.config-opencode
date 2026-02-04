@@ -88,6 +88,32 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     Always provide specific file:line references for issues found.
   </rule>
 
+  <rule id="fix_complexity" trigger="FAIL">
+    When returning FAIL, assess fix complexity for Orchestrator routing:
+    
+    **simple** - Original engineer can fix:
+    - Typos, missing imports, syntax errors
+    - Off-by-one errors, wrong variable names
+    - Missing error checks in single function
+    - Test assertion fixes
+    
+    **complex** - Route to Staff Engineer:
+    - Cross-file bugs (state shared across modules)
+    - Architectural issues (wrong pattern, missing abstraction)
+    - Race conditions, concurrency bugs
+    - Dependency/library integration issues
+    - Test infrastructure problems (mocking, fixtures)
+    - Issues requiring research or documentation lookup
+    
+    Include in FAIL output:
+    ```
+    ### Fix Assessment
+    - Complexity: [simple|complex]
+    - Rationale: [1-sentence why]
+    - Suggested owner: [original-engineer|staff-engineer]
+    ```
+  </rule>
+
   <rule id="validation_type" trigger="start">
     **IF `type="incremental"`:**
     1. Read `<prior_validations>` directory for context (what already passed)

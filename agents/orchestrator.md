@@ -400,7 +400,9 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     Call: `task("validator", validation_xml)`
     
     - PASS → Validator writes `.opencode/validations/TASKS-[id]/phase-[N].md`, continue to next phase
-    - FAIL → Fix or escalate, then re-validate phase
+    - FAIL → Route based on validator's Fix Assessment:
+      - `simple` → Original engineer retries
+      - `complex` → Staff Engineer (see Fix Routing below)
     
     **Final Integration Validation (after all phases):**
     ```xml
@@ -416,7 +418,29 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     Call: `task("validator", validation_xml)`
     
     - PASS → Validator writes `.opencode/validations/TASKS-[id]/integration.md`, proceed to Stage 6
-    - FAIL → Fix or escalate to staff-engineer
+    - FAIL → Route based on validator's Fix Assessment (see below)
+    
+    **Fix Routing (on FAIL):**
+    Parse validator's "Fix Assessment" section:
+    - IF `Complexity: simple` → Send back to original engineer with fix instructions
+    - IF `Complexity: complex` → Escalate to staff-engineer:
+      ```xml
+      <escalation type="complex_fix">
+        <context>
+          <requirements_doc>[path]</requirements_doc>
+          <design_doc>[path]</design_doc>
+          <task_doc>[path]</task_doc>
+          <phase>[current phase]</phase>
+        </context>
+        <failure>
+          <validator_output>[full validator FAIL output]</validator_output>
+          <original_engineer>[who attempted]</original_engineer>
+          <tasks_affected>[task numbers]</tasks_affected>
+        </failure>
+        <request>Fix complex issue identified by validator</request>
+      </escalation>
+      ```
+      Call: `task("staff-engineer", escalation_xml)`
     
     **Trivial Tier:** Skip per-phase, use single validation:
     ```xml
