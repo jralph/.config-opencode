@@ -295,6 +295,12 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 - Receive `<escalation>` or `<task>` XML
 - Return structured result with tasks completed
 - May modify design/task docs if architecturally necessary
+- **Fix Reports:** When fixing validator issues, include:
+  ```
+  Fixed: [issue description]
+  File: [path]
+  Lines: [line numbers changed]
+  ```
 
 **With Human:**
 - Receive free-form requests

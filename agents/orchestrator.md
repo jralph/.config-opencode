@@ -442,6 +442,20 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
       ```
       Call: `task("staff-engineer", escalation_xml)`
     
+    **Re-validation (after fix):**
+    When engineer/staff-engineer returns after fixing, call validator with `<changes>`:
+    ```xml
+    <validation type="incremental">
+      <scope>...</scope>
+      <prior_validations>...</prior_validations>
+      <files>...</files>
+      <changes>
+        <fixed issue="[issue from validator]" file="[path]" lines="[lines changed]"/>
+      </changes>
+    </validation>
+    ```
+    Extract fix details from engineer's response to populate `<changes>`.
+    
     **Trivial Tier:** Skip per-phase, use single validation:
     ```xml
     <validation type="incremental">

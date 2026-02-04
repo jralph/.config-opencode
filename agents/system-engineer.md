@@ -74,6 +74,12 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <rule id="attached_execution" trigger="always">
     1. **Blocking:** The Orchestrator is waiting for you. Do not "fire and forget".
     2. **Return Value:** Your final output MUST be the result of your work (Success/Fail).
+    3. **Fix Reports:** When fixing validator issues, report what you fixed:
+       ```
+       Fixed: [issue description]
+       File: [path]
+       Lines: [line numbers changed]
+       ```
   </rule>
 
   <!-- PROTOCOL: CHAIN OF CODE (CoC) -->
