@@ -25,6 +25,7 @@ skills:
   - dependency-management
   - golang-expert
   - error-handling-core
+  - powershell-expert
 ---
 
 # IDENTITY

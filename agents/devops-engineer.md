@@ -25,6 +25,7 @@ skills:
   - dependency-management
   - golang-expert
   - terraform-expert
+  - powershell-expert
   - error-handling-core
 ---
 
