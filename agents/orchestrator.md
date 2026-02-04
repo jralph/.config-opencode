@@ -2,7 +2,7 @@
 description: Orchestrates implementation by delegating to engineers and managing gates.
 mode: subagent
 model: google/gemini-3-flash-preview
-maxSteps: 50
+maxSteps: 100
 tools:
   task: true
   bash: true

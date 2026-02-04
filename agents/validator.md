@@ -2,7 +2,7 @@
 description: Strict gatekeeper for code quality and requirements. Returns PASS/WARN/FAIL.
 mode: all
 model: zai-coding-plan/glm-4.7
-maxSteps: 20
+maxSteps: 40
 tools:
   task: true
   skill: true
