@@ -120,11 +120,26 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     2. **Check Files:** Use `glob` to find:
        - `.opencode/requirements/REQ-[feature].md`
        - `.opencode/designs/[feature].md`
-       - `.opencode/plans/[feature].md`
+       - `.opencode/tasks/TASKS-[id].md` or `.opencode/plans/[feature].md`
+       - `.opencode/validations/TASKS-[id]/` (validation results)
     
     3. **Resume Logic:**
        
-       **IF all three exist:**
+       **IF task doc + validation dir exist (incomplete orchestrator):**
+       - This indicates an interrupted implementation session
+       - Hand off to Architect for resume assessment:
+         ```xml
+         <resume_assessment>
+           <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+           <validation_dir>.opencode/validations/TASKS-[id]/</validation_dir>
+           <design_doc>.opencode/designs/[feature].md</design_doc>
+           <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+         </resume_assessment>
+         ```
+         Call: `task("architect", resume_assessment_xml)`
+       - STOP (Architect will assess and resume Orchestrator).
+       
+       **IF all three exist (legacy - no validation dir):**
        - Read `.opencode/designs/[feature].md` frontmatter
        - Read `.opencode/plans/[feature].md` frontmatter
        - IF design `approved: true` AND plan `status` != "completed":

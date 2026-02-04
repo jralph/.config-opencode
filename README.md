@@ -562,6 +562,66 @@ If an engineer discovers during implementation that complexity exceeds the asses
 </task>
 ```
 
+**Orchestrator → Validator (Per-Phase)**:
+```xml
+<validation type="incremental">
+  <scope>
+    <phase>1</phase>
+    <tasks>1.1, 1.2, 1.3</tasks>
+    <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  </scope>
+  <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
+  <files>
+    <file>[files modified in this phase]</file>
+  </files>
+</validation>
+```
+
+**Orchestrator → Validator (Final Integration)**:
+```xml
+<validation type="integration">
+  <scope>
+    <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    <design_doc>.opencode/designs/[feature].md</design_doc>
+    <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  </scope>
+  <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
+</validation>
+```
+
+**Product Owner → Architect (Resume Assessment)**:
+```xml
+<resume_assessment>
+  <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  <validation_dir>.opencode/validations/TASKS-[id]/</validation_dir>
+  <design_doc>.opencode/designs/[feature].md</design_doc>
+  <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+</resume_assessment>
+```
+
+**Architect → Orchestrator (Resume)**:
+```xml
+<handoff type="resume">
+  <complexity>[from task doc]</complexity>
+  <design>
+    <file>.opencode/designs/[feature].md</file>
+  </design>
+  <requirements>
+    <file>.opencode/requirements/REQ-[id].md</file>
+  </requirements>
+  <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  <resume_from>
+    <phase>[N]</phase>
+    <reason>[why resuming here]</reason>
+  </resume_from>
+  <validation_state>
+    <passed_phases>[1, 2]</passed_phases>
+    <failed_phase>[3]</failed_phase>
+  </validation_state>
+</handoff>
+```
+
 ### EARS Requirements Format
 
 All requirements use [EARS syntax](https://alistairmavin.com/ears/) for unambiguous specifications:

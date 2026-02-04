@@ -219,28 +219,35 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <workflow_stages>
   <stage id="0" name="Resume or Start">
-    1. **Check:** Look for `.opencode/plans/[feature].md`.
-    2. **Resume:** IF plan file exists:
+    1. **Check:** Look for `.opencode/plans/[feature].md` or `.opencode/tasks/TASKS-[id].md`.
+    2. **Resume:** IF plan/task file exists:
        - Read YAML frontmatter to get `status` and `current_stage`
        - IF `status` == "completed": Report completion and STOP.
+       - **Check Validation State:** Read `.opencode/validations/TASKS-[id]/` directory:
+         - List existing `phase-*.md` files to see which phases passed
+         - Use this to determine resume point
        - **Assess Completion:** Call `task("project-knowledge")` with:
          ```xml
          <query type="completion_check">
-           <task_doc>.opencode/plans/[feature].md</task_doc>
-           <request>Assess which tasks are complete vs pending. Check target files exist with expected implementations.</request>
+           <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+           <validation_dir>.opencode/validations/TASKS-[id]/</validation_dir>
+           <request>Assess which phases are validated vs pending. Check validation files for status.</request>
          </query>
          ```
-       - Use response to determine which tasks to delegate next
-       - **Skip to Stage 3** and resume from first incomplete task.
+       - Use response to determine which phase/tasks to resume from
+       - **Skip to Stage 3** and resume from first incomplete/unvalidated phase.
     3. **Start:** IF no plan file exists, proceed to Stage 1.
   </stage>
 
   <stage id="1" name="Receive Design">
     1. **Parse:** Extract `<handoff>` XML from the caller.
     2. **Extract:** Complexity tier and Approval gate flag.
-    3. **Resume Check:** IF `<handoff type="resume">` AND `<task_doc>` provided:
-       - Read existing plan file from `<task_doc>` path
-       - **Skip to Stage 3** (do NOT re-plan)
+    3. **Resume Check:** IF `<handoff type="resume">`:
+       - Read `<task_doc>` path for existing plan
+       - Read `<resume_from>` for phase to resume at
+       - Read `<validation_state>` for passed/failed phases
+       - **Skip to Stage 3** at specified phase (do NOT re-plan)
+       - Only re-validate failed phases, skip passed phases
   </stage>
 
   <stage id="2" name="Task Planning (Conditional)">
@@ -351,10 +358,14 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     
     **CONTINUATION (after each result):**
     1. Update plan file - mark completed task(s)
-    2. IF more tasks remain:
+    2. IF phase complete (all tasks in phase done):
+       - **Call validator for phase** (see Stage 5 incremental validation)
+       - IF FAIL: Fix or escalate, then re-validate phase
+       - IF PASS: Continue to next phase
+    3. IF more tasks remain in current phase:
        - Construct NEW `<task>` XML for next task(s)
        - Call `task()` again (stay in Stage 3)
-    3. IF all tasks complete: Proceed to Stage 4
+    4. IF all phases complete: Proceed to Stage 4
   </stage>
 
   <stage id="4" name="Security Gate (Conditional)">
@@ -370,24 +381,56 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <stage id="5" name="Validation Gate">
     **Update:** Update plan frontmatter `status: validation`, `current_stage: 5`.
     
-    **All Tiers:** Mandatory. Call validator with full feature context:
+    **Per-Phase Validation (during Stage 3):**
+    After each phase completes, call validator with incremental scope:
     ```xml
-    <validation>
+    <validation type="incremental">
       <scope>
+        <phase>[N]</phase>
+        <tasks>[tasks in this phase, e.g., 1.1, 1.2, 1.3]</tasks>
         <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
-        <design_doc>.opencode/designs/[feature].md</design_doc>
-        <task_doc>.opencode/plans/[feature].md</task_doc>
-        <tasks_completed>all</tasks_completed>
+        <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
       </scope>
+      <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
       <files>
-        [list all files modified during implementation]
+        [files modified in this phase only]
       </files>
     </validation>
     ```
     Call: `task("validator", validation_xml)`
     
-    - PASS → Stage 6
+    - PASS → Validator writes `.opencode/validations/TASKS-[id]/phase-[N].md`, continue to next phase
+    - FAIL → Fix or escalate, then re-validate phase
+    
+    **Final Integration Validation (after all phases):**
+    ```xml
+    <validation type="integration">
+      <scope>
+        <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+        <design_doc>.opencode/designs/[feature].md</design_doc>
+        <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+      </scope>
+      <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
+    </validation>
+    ```
+    Call: `task("validator", validation_xml)`
+    
+    - PASS → Validator writes `.opencode/validations/TASKS-[id]/integration.md`, proceed to Stage 6
     - FAIL → Fix or escalate to staff-engineer
+    
+    **Trivial Tier:** Skip per-phase, use single validation:
+    ```xml
+    <validation type="incremental">
+      <scope>
+        <phase>1</phase>
+        <tasks>all</tasks>
+        <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+        <task_doc>.opencode/plans/[feature].md</task_doc>
+      </scope>
+      <prior_validations></prior_validations>
+      <files>[all modified files]</files>
+    </validation>
+    ```
   </stage>
 
   <stage id="6" name="Merge Gate (Conditional)">

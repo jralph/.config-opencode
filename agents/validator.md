@@ -28,19 +28,46 @@ Your job is to verify implementation quality before merge.
 
 ## Input Format
 
-Engineers call you with a `<validation>` XML payload:
+Orchestrator calls you with a `<validation>` XML payload:
+
+**Incremental (per-phase):**
+```xml
+<validation type="incremental">
+  <scope>
+    <phase>1</phase>
+    <tasks>1.1, 1.2, 1.3</tasks>
+    <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  </scope>
+  <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
+  <files>
+    <file>src/foo.ts</file>
+  </files>
+</validation>
+```
+
+**Integration (final):**
+```xml
+<validation type="integration">
+  <scope>
+    <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    <design_doc>.opencode/designs/[feature].md</design_doc>
+    <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+  </scope>
+  <prior_validations>.opencode/validations/TASKS-[id]/</prior_validations>
+</validation>
+```
+
+**Legacy (full validation):**
 ```xml
 <validation>
   <scope>
     <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
     <design_doc>.opencode/designs/[feature].md</design_doc>
     <task_doc>.opencode/plans/[feature].md</task_doc>
-    <tasks_completed>[1, 1.1, 2]</tasks_completed>
+    <tasks_completed>all</tasks_completed>
   </scope>
-  <files>
-    <file>src/foo.ts</file>
-    <file>src/bar.ts</file>
-  </files>
+  <files>...</files>
 </validation>
 ```
 
@@ -61,16 +88,60 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     Always provide specific file:line references for issues found.
   </rule>
 
+  <rule id="validation_type" trigger="start">
+    **IF `type="incremental"`:**
+    1. Read `<prior_validations>` directory for context (what already passed)
+    2. Focus ONLY on `<tasks>` listed - do not re-validate prior phases
+    3. Validate only `<files>` listed
+    4. Write result to `.opencode/validations/TASKS-[id]/phase-[N].md`
+    
+    **IF `type="integration"`:**
+    1. Read ALL files in `<prior_validations>` directory
+    2. Skip per-task checks (already done)
+    3. Focus on cross-phase integration: imports, interfaces, data flow
+    4. Run full test suite
+    5. Write result to `.opencode/validations/TASKS-[id]/integration.md`
+    
+    **IF no type (legacy):**
+    1. Full validation of everything
+    2. No result file written
+  </rule>
+
+  <rule id="result_file" trigger="incremental|integration">
+    Write validation result to `.opencode/validations/TASKS-[id]/[phase].md`:
+    ```yaml
+    ---
+    task_doc: .opencode/tasks/TASKS-[id].md
+    phase: [N] or "integration"
+    tasks: [1.1, 1.2, 1.3]
+    status: PASS | FAIL | WARN
+    validated_at: [ISO timestamp]
+    ---
+    
+    ## Summary
+    [1-2 sentence summary]
+    
+    ## Files Checked
+    - path/to/file.go ✓|✗
+    
+    ## Issues
+    - [file:line] [description] (if any)
+    
+    ## Tests
+    - Passed: X / Failed: Y
+    ```
+  </rule>
+
   <rule id="scope_detection" trigger="start">
     **IF `<validation>` XML provided:**
     1. Read all docs from `<scope>`: requirements, design, task
-    2. Focus validation on `<tasks_completed>` from task doc
-    3. Validate only `<files>` listed
+    2. Focus validation on tasks/phase specified
+    3. Validate only `<files>` listed (incremental) or all (integration)
     
     **IF no XML provided (fallback):**
     1. Run `git diff --name-only HEAD~1` to identify changed files
     2. Use `glob` to find `.opencode/requirements/REQ-*.md`
-    3. Use `glob` to find `.opencode/designs/*.md` and `.opencode/plans/*.md`
+    3. Use `glob` to find `.opencode/designs/*.md` and `.opencode/tasks/*.md`
   </rule>
 
   <!-- The Read-Only Rule -->
@@ -88,13 +159,16 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <stage id="1" name="Context Gathering">
     1. Parse `<validation>` XML (or detect via git)
     2. Read requirements doc → extract EARS statements
-    3. Read design doc → understand expected architecture
-    4. Read task doc → identify which tasks were implemented
-    5. Use `codegraphcontext` to understand affected code paths
+    3. Read design doc → understand expected architecture (if provided)
+    4. Read task doc → identify which tasks to validate
+    5. IF incremental: Read `<prior_validations>` for context
+    6. Use `codegraphcontext` to understand affected code paths
   </stage>
   
   <stage id="2" name="Task Verification">
-    For each task in `<tasks_completed>`:
+    **Skip if `type="integration"`** (already validated per-phase).
+    
+    For each task in scope:
     1. Find the task definition in task doc
     2. Verify the implementation matches the task spec
     3. Check files modified align with task scope
@@ -107,29 +181,44 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   </stage>
   
   <stage id="4" name="Test Verification">
+    **Incremental:** Run tests for affected files only (if possible).
+    **Integration:** Run full test suite.
+    
     1. **Run Tests:** Execute test suite via `bash`
     2. **Coverage:** Check coverage meets threshold (80% minimum)
     3. **New Tests:** Verify new code has corresponding tests
   </stage>
   
   <stage id="5" name="Requirements Traceability">
+    **Incremental:** Check EARS for tasks in scope only.
+    **Integration:** Full requirements coverage check.
+    
     For each EARS statement in requirements doc:
     1. "When [X], System shall [Y]" → Find test that verifies this
     2. Check design constraints are respected
     3. Verify error paths are tested
   </stage>
   
-  <stage id="6" name="Report">
+  <stage id="6" name="Write Result File">
+    **Skip if legacy (no type).**
+    
+    1. Create `.opencode/validations/TASKS-[id]/` directory if needed
+    2. Write result file with YAML frontmatter + markdown body
+    3. Filename: `phase-[N].md` or `integration.md`
+  </stage>
+  
+  <stage id="7" name="Report">
     ```
     ## Verdict: [PASS|WARN|FAIL]
     
     ### Scope
     - Requirements: REQ-[id]
-    - Tasks Validated: [1, 1.1, 2]
+    - Phase: [N] (or "Integration")
+    - Tasks Validated: [1.1, 1.2, 1.3]
     
     ### Task Compliance
-    - [Task 1] ✓ Implemented correctly
-    - [Task 1.1] ✗ Missing error handling
+    - [Task 1.1] ✓ Implemented correctly
+    - [Task 1.2] ✗ Missing error handling
     
     ### Issues Found
     - [file:line] [severity] [description]
@@ -137,9 +226,8 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     ### Tests
     - Passed: X / Failed: Y / Coverage: Z%
     
-    ### Requirements Coverage
-    - [EARS-1] ✓ Covered by test_xxx
-    - [EARS-2] ✗ Missing test
+    ### Result File
+    - Written to: .opencode/validations/TASKS-[id]/phase-[N].md
     ```
   </stage>
 </workflow_stages>

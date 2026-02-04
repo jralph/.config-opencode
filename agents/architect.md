@@ -91,8 +91,9 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 <workflow_stages>
   <stage id="0" name="Resume or Start">
     1. **Check:** Look for `.opencode/designs/[feature].md`.
-    2. **Resume:** IF found, load state (optionally check for `.opencode/plans/[feature].md`) and proceed to stage 4, skipping human approval.
-    3. **Start:** IF new, proceed to Stage 0.5
+    2. **Resume Design:** IF found, load state and proceed to stage 4, skipping human approval.
+    3. **Resume Orchestrator:** IF called with `<resume_assessment>` XML (see below), assess and resume.
+    4. **Start:** IF new, proceed to Stage 0.5
   </stage>
 
   <stage id="0.5" name="EARS Gatekeeper">
@@ -100,6 +101,55 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     2. **Criteria:** Do they follow EARS (Trigger -> Response)?
        * *Pass:* Proceed to Stage 1.
        * *Fail:* REJECT back to caller. "Requirements must be unambiguous."
+  </stage>
+
+  <stage id="resume" name="Resume Assessment Protocol">
+    **Trigger:** Called with `<resume_assessment>` XML from PO or human.
+    
+    **Input Format:**
+    ```xml
+    <resume_assessment>
+      <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+      <validation_dir>.opencode/validations/TASKS-[id]/</validation_dir>
+      <design_doc>.opencode/designs/[feature].md</design_doc>
+      <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+    </resume_assessment>
+    ```
+    
+    **Workflow:**
+    1. **Read Task Doc:** Parse frontmatter for `status`, `current_stage`, `complexity`
+    2. **Read Validation Dir:** List `phase-*.md` files, read their `status` frontmatter
+       - Identify last PASS phase
+       - Identify any FAIL phases
+    3. **Assess State:**
+       - IF all phases PASS + integration PASS: Report "Already complete"
+       - IF phase FAIL: Determine if design issue or implementation issue
+       - IF phases missing: Determine resume point
+    4. **Decision:**
+       - **Implementation issue:** Resume orchestrator at failed/incomplete phase
+       - **Design issue:** Revise design, then resume orchestrator
+       - **Unclear:** Query project-knowledge for more context
+    5. **Handoff:** Call `task("orchestrator")` with resume handoff:
+       ```xml
+       <handoff type="resume">
+         <complexity>[from task doc]</complexity>
+         <design>
+           <file>.opencode/designs/[feature].md</file>
+         </design>
+         <requirements>
+           <file>.opencode/requirements/REQ-[id].md</file>
+         </requirements>
+         <task_doc>.opencode/tasks/TASKS-[id].md</task_doc>
+         <resume_from>
+           <phase>[N]</phase>
+           <reason>[why resuming here]</reason>
+         </resume_from>
+         <validation_state>
+           <passed_phases>[1, 2]</passed_phases>
+           <failed_phase>[3] (if any)</failed_phase>
+         </validation_state>
+       </handoff>
+       ```
   </stage>
 
   <stage id="1" name="Context Discovery">
