@@ -67,8 +67,16 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <!-- Context First -->
   <rule id="context_first" trigger="start_task">
     ALWAYS call `task("project-knowledge")` BEFORE designing.
-    *   Query: "Map relevant files and constraints for [Task]."
-    *   Failure to load context = Hallucination Risk.
+    
+    Example queries:
+    - "Map files and patterns related to [feature]. Include constraints from memory."
+    - "What existing patterns handle [domain]? List files and interfaces."
+    - "Any past issues or lessons learned about [area]?"
+    
+    Use your judgement to request additional context beyond these examples.
+    If the response is insufficient, follow up with more specific queries.
+    
+    Failure to load context = Hallucination Risk.
   </rule>
 
   <!-- EARS Validation -->
