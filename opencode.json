@@ -3,11 +3,11 @@
   "default_agent": "product-owner",
   "plugin": [
     "opencode-gemini-auth@latest",
-    "@tarquinen/opencode-dcp@latest",
-    "@ramtinj95/opencode-tokenscope",
-    "opencode-helicone-session",
+    // "@tarquinen/opencode-dcp@latest",
+    // "@ramtinj95/opencode-tokenscope",
+    // "opencode-helicone-session",
     "@zenobius/opencode-skillful",
-    "opencode-wakatime",
+    // "opencode-wakatime",
     "opencode-sessions",
     "@mailshieldai/opencode-canvas",
     "opencode-agent-memory"
@@ -88,9 +88,13 @@
     "github": {
       "type": "local",
       "command": [
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-github"
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
       ],
       "environment": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
@@ -149,6 +153,5 @@
     }
   },
   "provider": {
-    
   }
 }

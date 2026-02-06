@@ -1,7 +1,7 @@
 ---
 description: Sub-agent for creating and maintaining READMEs and docs.
 mode: subagent
-model: zai-coding-plan/glm-4.7
+model: google/gemini-3-pro-preview
 maxSteps: 20
 tools:
   task: true
@@ -13,11 +13,16 @@ tools:
   webfetch: true
   fetch: true
   Context7: true
+  github: true
+skills:
+  - technical-writer
+  - coding-guidelines
 permissions:
   edit: allow       # Autonomous: Write READMEs
   webfetch: allow   # Autonomous: Check links
   task:
     project-knowledge: allow
+    api-documentation: allow  # Generate API docs
     validator: allow
     "*": deny
 ---

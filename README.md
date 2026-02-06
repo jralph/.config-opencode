@@ -300,6 +300,32 @@ flowchart TD
   - Synthesize into actionable context map
 - Memory audits every 10 tasks or >500 lines
 
+**Debugger** (`debugger.md`)
+- Runtime failure diagnosis and investigation
+- **Mode**: All (primary + subagent)
+- **Thought Pattern**: Hypothesis Elimination
+  - Fast path for strong convictions
+  - Systematic elimination for complex issues
+  - Read-only diagnosis, hands off to fixers
+- Integrated into Staff Engineer workflow for runtime failures
+
+#### Tooling Agents
+
+**Code Search** (`code-search.md`)
+- Semantic code search and pattern discovery
+- Returns data, not recommendations
+- Used by all engineers, architect, debugger, orchestrator, validator, QA
+
+**Dependency Analyzer** (`dependency-analyzer.md`)
+- Dependency safety, CVE scanning, conflict detection
+- Returns security findings and compatibility issues
+- Used by engineers, staff, security, architect, orchestrator
+
+**API Documentation** (`api-documentation.md`)
+- Generate and maintain API docs from code
+- Extracts types, endpoints, parameters
+- Used by documentation and system engineers
+
 ## Tools
 
 Agents use a variety of tools for code intelligence, context discovery, and verification.
@@ -327,48 +353,91 @@ Skills are reusable instruction sets loaded on-demand by agents. Located in `ski
 
 ### Available Skills
 
-#### `bash-strategy`
-Safe shell command execution patterns. Prevents destructive operations.
+#### Language-Specific Skills
 
-#### `code-style-analyst`
+**`golang-expert`**  
+Go-specific best practices: Clean Architecture, microservices, OpenTelemetry, performance.
+
+**`typescript-expert`**  
+TypeScript development: Type safety, generics, async patterns, utility types, strict mode.
+
+**`react-patterns`**  
+Modern React: Hooks, composition, state management, performance optimization, error boundaries.
+
+**`powershell-expert`**  
+Windows shell patterns and automation.
+
+#### Architecture & Design
+
+**`design-architect`**  
+Technical design document standards. Table of contents, Mermaid diagrams, external references.
+
+**`design-patterns-core`**  
+Pattern selection guidance (Creational, Structural, Behavioral). Use MCP servers for language-specific examples.
+
+**`api-design-standards`**  
+REST API conventions: Versioning, error handling, pagination, authentication, OpenAPI documentation.
+
+**`database-patterns`**  
+Database design: Schema design, indexing strategies, query optimization, migrations, ORM best practices.
+
+#### Quality & Standards
+
+**`coding-guidelines`**  
+Core coding principles: Naming, error handling, security, complexity standards (cyclomatic, cognitive).
+
+**`code-style-analyst`**  
 Pattern recognition for existing code style. Ensures consistency with codebase conventions.
 
-#### `coding-guidelines`
-Core coding principles: naming, error handling, security, testing standards.
+**`testing-standards`**  
+Comprehensive testing guidance: Unit, integration, property-based, E2E. Testing pyramid ratios.
 
-#### `dependency-management`
+**`error-handling-core`**  
+Hybrid AI-human logging protocol. Dual-channel logging for humans and AI agents.
+
+**`error-handling-go`**  
+Go-specific error patterns: Wrapping, sentinel errors, custom types.
+
+**`error-handling-ts`**  
+TypeScript error patterns: Result types, error boundaries, async error handling.
+
+**`performance-core`**  
+Universal optimization principles: Measurement, algorithmic complexity, caching, monitoring.
+
+**`performance-go`**  
+Go performance: Profiling (CPU, memory), goroutine pooling, memory optimization, GC tuning.
+
+**`performance-ts`**  
+TypeScript/JavaScript performance: Bundle optimization, React performance, Web Vitals, lazy loading.
+
+#### Infrastructure
+
+**`bash-strategy`**  
+Non-interactive shell strategy for headless environments. Prevents hangs and timeouts.
+
+**`terraform-expert`**  
+Infrastructure as Code best practices for Terraform.
+
+#### Process & Workflow
+
+**`task-planner`**  
+Task breakdown standards. Rule of 3 (≤3 files per task), requirements/design linking.
+
+**`git-workflow`**  
+Conventional commits, branching strategy, PR standards, semantic versioning.
+
+**`memory-management`**  
+Memory audit protocol, conflict resolution, garbage collection. Triggers every 10 tasks or >500 lines.
+
+**`dependency-management`**  
 Pre-approved library lists, security vetting, version pinning standards.
 
 **Pre-approved Libraries**:
 - Testing: jest, vitest, pytest, testify, fast-check
 - Dev Tools: eslint, prettier, golangci-lint
 
-#### `design-architect`
-Technical design document standards. Table of contents, Mermaid diagrams, external references.
-
-#### `git-workflow`
-Conventional commits, branching strategy, PR standards, semantic versioning.
-
-#### `golang-expert`
-Go-specific best practices: Clean Architecture, microservices, OpenTelemetry, performance.
-
-#### `memory-management`
-Memory audit protocol, conflict resolution, garbage collection. Triggers every 10 tasks or >500 lines.
-
-#### `prompt-engineering`
-Effective prompt construction for AI agents.
-
-#### `task-planner`
-Task breakdown standards. Rule of 3 (≤3 files per task), requirements/design linking.
-
-#### `technical-writer`
+**`technical-writer`**  
 Documentation standards for user-facing content.
-
-#### `terraform-expert`
-Infrastructure as Code best practices for Terraform.
-
-#### `testing-standards`
-Comprehensive testing guidance: unit, integration, property-based, E2E. Testing pyramid ratios.
 
 ## Protocols
 

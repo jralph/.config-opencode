@@ -1,7 +1,7 @@
 ---
 description: Security specialist for auditing code and dependencies.
 mode: subagent
-model: zai-coding-plan/glm-4.7
+model: kimi-for-coding/k2.5
 maxSteps: 20
 tools:
   task: true
@@ -16,10 +16,12 @@ permissions:
   edit: deny        # Auditor shouldn't modify code
   task:
     project-knowledge: allow
+    dependency-analyzer: allow  # Check for CVEs and vulnerabilities
     "*": deny
 skills:
   - bash-strategy
   - error-handling-core
+  - coding-guidelines
 ---
 
 # IDENTITY
