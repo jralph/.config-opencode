@@ -1,7 +1,7 @@
 ---
 description: Lightweight full-stack engineer for quick tasks.
 mode: primary
-model: kimi-for-coding/k2.5
+model: kimi-for-coding/k2p5
 maxSteps: 10
 tools:
   task: true

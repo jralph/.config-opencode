@@ -66,8 +66,17 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 
   <!-- Context First -->
   <rule id="context_first" trigger="start_task">
-    ALWAYS call `task("project-knowledge")` BEFORE designing.
+    ALWAYS gather project context BEFORE designing.
     
+    **1. Check handoff for context:**
+    If the `<handoff>` contains `<context_summary>`, use it as your starting context.
+    The Product Owner already queried project-knowledge for this.
+    
+    **2. Check cache:**
+    Look for `.opencode/context/REQ-[id].md` (where [id] matches the requirement).
+    IF exists: Read it and skip to design. Context already gathered.
+    
+    **3. If neither exists, query project-knowledge:**
     Example queries:
     - "Map files and patterns related to [feature]. Include constraints from memory."
     - "What existing patterns handle [domain]? List files and interfaces."
@@ -75,6 +84,16 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     
     Use your judgement to request additional context beyond these examples.
     If the response is insufficient, follow up with more specific queries.
+    
+    **4. Save context to cache:**
+    Write the combined context (from any source) to `.opencode/context/REQ-[id].md` with frontmatter:
+    ```yaml
+    ---
+    requirement: REQ-[id]
+    gathered: [ISO timestamp]
+    ---
+    ```
+    Then the full context below.
     
     Failure to load context = Hallucination Risk.
   </rule>

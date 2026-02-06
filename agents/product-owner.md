@@ -269,6 +269,10 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
         <constraint>[User Pref 1]</constraint>
         <constraint>[User Pref 2]</constraint>
       </context>
+      <context_summary>
+        [Include project-knowledge response from Stage 3 here.
+         This saves the Architect from re-querying project-knowledge.]
+      </context_summary>
       <requirements>
         <file>.opencode/requirements/REQ-[id].md</file>
       </requirements>

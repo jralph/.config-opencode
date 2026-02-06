@@ -88,12 +88,15 @@ When asked for a "Status Check" or "Health Check":
 
 # PROTOCOL: MAP GENERATION (For Caller)
 When the caller asks for a "Context Map", "File Tree", or "Structure":
-1.  **QUERY GRAPH:** Use `codegraphcontext` to map the relevant area.
+1.  **CHECK CONTEXT CACHE:** Look for `.opencode/context/REQ-*.md` files related to the query.
+    If a relevant cached context exists, use it to enrich your response.
+2.  **QUERY GRAPH:** Use `codegraphcontext` to map the relevant area.
     * *Tip:* Query specific file paths or symbols, e.g., `"MATCH (f:File {path: 'src/auth'})-[:CONTAINS]->(s) RETURN s"`
-2.  **RECALL MEMORY:** Use `memory_read(block="project")` to find relevant "Lessons Learned".
-3.  **SYNTHESIZE:**
+3.  **RECALL MEMORY:** Use `memory_read(block="project")` to find relevant "Lessons Learned".
+4.  **SYNTHESIZE:**
     * **⚠️ Critical Warnings:** (Insert Memory items).
     * **🗺️ Code Map:** (Insert Graph items).
+    * **📋 Prior Context:** (Insert relevant cached context if found).
 
 # PROTOCOL: MEMORY AUDIT (Scheduled)
 **Trigger:** Every 10 completed tasks OR when memory exceeds 500 lines.
