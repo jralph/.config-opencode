@@ -13,6 +13,7 @@ tools:
   github: true
   codegraphcontext: true
   sequentialthinking: true
+  frontend: true
 permissions:
   bash: allow
   edit: allow

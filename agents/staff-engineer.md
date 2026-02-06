@@ -11,6 +11,7 @@ tools:
   chrome-devtools: true
   codegraphcontext: true
   Context7: true
+  frontend: true
   fetch: true
   json: true
   sequentialthinking: true

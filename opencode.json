@@ -139,6 +139,16 @@
         "chrome-devtools-mcp@latest"
       ]
     },
+    "frontend": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "awslabs.frontend-mcp-server@latest"
+      ],
+      "environment": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
     "codegraphcontext": {
       "type": "local",
       "command": [
