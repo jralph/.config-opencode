@@ -19,6 +19,7 @@ permissions:
     code-search: allow    # Find test coverage, related code
     "*": deny
 skills:
+  - token-efficiency
   - code-style-analyst
   - coding-guidelines
   - testing-standards
@@ -93,6 +94,17 @@ IF no XML provided: Fall back to git diff detection.
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Then follow its protocols:
+    - Partial reads satisfy OpenCode's read protection
+    - Full reads OK for small files
+  </rule>
+
   <!-- The Verdict Rule -->
   <rule id="verdict_logic" trigger="always">
     OUTPUT one of three verdicts:

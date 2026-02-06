@@ -23,6 +23,7 @@ tools:
   edit: true
   read: true
 skills:
+  - token-efficiency
   - task-planner
 permissions:
   bash: allow
@@ -58,6 +59,17 @@ You orchestrate the **Flesh** (Implementation) and manage execution gates.
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Then follow its protocols:
+    - Partial reads satisfy OpenCode's read protection
+    - Full reads OK for small files
+  </rule>
+
   <!-- PROTOCOL: NO PREMATURE EXIT -->
   <rule id="no_premature_exit" trigger="always" priority="critical">
     You MUST NOT stop/return until you have:

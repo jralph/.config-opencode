@@ -27,6 +27,7 @@ permissions:
     fullstack-engineer: allow
     "*": deny
 skills:
+  - token-efficiency
   - dependency-management
   - golang-expert
   - error-handling-core
@@ -64,11 +65,16 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     ```
   </rule>
 
-  <!-- PROTOCOL: FILE READING EFFICIENCY -->
-  <rule id="file_efficiency" trigger="reading_files">
-    Optimize file reading to reduce token usage:
-    - **Files:** Always use built-in `read` (required for edit tracking)
-    - **Project overview:** Use `filesystem_directory_tree` instead of multiple `list`/`glob`
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Key points:
+    - Partial reads satisfy OpenCode's read protection
+    - Use grep/codegraph to find locations before reading large files
+    - Full reads OK for small files or data analysis
   </rule>
 
   <!-- PROTOCOL: TEST EXECUTION -->

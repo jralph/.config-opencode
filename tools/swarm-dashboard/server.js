@@ -132,9 +132,12 @@ function getToolParts(messageID) {
   return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => {
     const p = readJSON(path.join(dir, f));
     if (!p || p.type !== 'tool') return null;
-    const inputLen = JSON.stringify(p.state?.input || '').length;
+    const input = p.state?.input || {};
+    const inputLen = JSON.stringify(input).length;
     const outputLen = JSON.stringify(p.state?.output || '').length;
-    return { tool: p.tool, inputTokens: Math.round(inputLen / 4), outputTokens: Math.round(outputLen / 4) };
+    const start = p.state?.time?.start;
+    const end = p.state?.time?.end;
+    return { tool: p.tool, args: input, inputTokens: Math.round(inputLen / 4), outputTokens: Math.round(outputLen / 4), start, end, duration: (start && end) ? end - start : 0 };
   }).filter(Boolean);
 }
 
@@ -227,15 +230,29 @@ function buildTree(projectID, rootSessionID) {
       }
     }
     
-    // Collect tool stats from message parts
+    // Collect tool stats and flame events from message parts
     const toolStats = {};
+    const flameEvents = [];
+    const inefficientReads = [];
     for (const m of msgs) {
       const parts = getToolParts(m.id);
       for (const p of parts) {
-        if (!toolStats[p.tool]) toolStats[p.tool] = { calls: 0, inputTokens: 0, outputTokens: 0 };
+        if (!toolStats[p.tool]) toolStats[p.tool] = { calls: 0, inputTokens: 0, outputTokens: 0, duration: 0 };
         toolStats[p.tool].calls++;
         toolStats[p.tool].inputTokens += p.inputTokens;
         toolStats[p.tool].outputTokens += p.outputTokens;
+        toolStats[p.tool].duration += p.duration || 0;
+        if (p.start && p.end) {
+          flameEvents.push({ type: 'tool', name: p.tool, start: p.start, end: p.end, agent: m.agent, args: p.args });
+        }
+        // Track inefficient reads (no offset/limit/startLine/endLine)
+        if (p.tool === 'read' && p.args && !p.args.offset && !p.args.limit && !p.args.startLine && !p.args.endLine) {
+          inefficientReads.push({ file: p.args.filePath, agent: m.agent, tokens: p.outputTokens });
+        }
+      }
+      // Add agent message spans
+      if (m.created && m.completed) {
+        flameEvents.push({ type: 'agent', name: m.agent || 'unknown', start: m.created, end: m.completed });
       }
     }
 
@@ -253,17 +270,25 @@ function buildTree(projectID, rootSessionID) {
       // Aggregate child tool stats
       if (c.toolStats) {
         for (const [tool, stats] of Object.entries(c.toolStats)) {
-          if (!toolStats[tool]) toolStats[tool] = { calls: 0, inputTokens: 0, outputTokens: 0 };
+          if (!toolStats[tool]) toolStats[tool] = { calls: 0, inputTokens: 0, outputTokens: 0, duration: 0 };
           toolStats[tool].calls += stats.calls;
           toolStats[tool].inputTokens += stats.inputTokens;
           toolStats[tool].outputTokens += stats.outputTokens;
+          toolStats[tool].duration += stats.duration || 0;
         }
       }
+      // Aggregate child flame events and inefficient reads
+      if (c.flameEvents) flameEvents.push(...c.flameEvents);
+      if (c.inefficientReads) inefficientReads.push(...c.inefficientReads);
     }
     timeline.sort((a, b) => a.time - b.time);
+    flameEvents.sort((a, b) => a.start - b.start);
     
     // Calculate total diff tokens (this node + children)
     const totalDiffTokens = Object.values(agents).reduce((s, a) => s + (a.diffTokens || 0), 0) + childDiffTokens;
+    
+    // Calculate total tool calls
+    const toolCalls = Object.values(toolStats).reduce((s, t) => s + t.calls, 0);
 
     const agentStats = {};
     for (const [k, v] of Object.entries(agents)) {
@@ -274,7 +299,7 @@ function buildTree(projectID, rootSessionID) {
       fileStats[k] = { additions: v.additions, deletions: v.deletions, agents: [...v.agents] };
     }
 
-    return { id: sid, title: session.title, directory: session.directory, agent: msgs[0]?.agent, messages: msgs.length, diffs: totalDiffs, agents: agentStats, files: fileStats, children, created: session.created, duration: (startTime && endTime) ? endTime - startTime : null, timeline, tokens: totalTokens, diffTokens: totalDiffTokens, referencedFiles: [...referencedFiles], humanMessages, toolStats };
+    return { id: sid, title: session.title, directory: session.directory, agent: msgs[0]?.agent, messages: msgs.length, diffs: totalDiffs, agents: agentStats, files: fileStats, children, created: session.created, duration: (startTime && endTime) ? endTime - startTime : null, timeline, tokens: totalTokens, diffTokens: totalDiffTokens, referencedFiles: [...referencedFiles], humanMessages, toolStats, toolCalls, flameEvents, inefficientReads };
   }
 
   const root = buildNode(rootSessionID, true);
@@ -301,7 +326,7 @@ const HTML = `<!DOCTYPE html>
   .stat .val { font-size: 1.8em; font-weight: bold; color: #58a6ff; }
   .stat .label { font-size: 0.75em; color: #8b949e; margin-top: 4px; }
   .tree { font-size: 13px; }
-  .tree-row { display: grid; grid-template-columns: minmax(200px, 2fr) 80px 50px 50px 60px 50px 60px 1fr; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #21262d; align-items: center; }
+  .tree-row { display: grid; grid-template-columns: minmax(160px, 2fr) 75px 35px 35px 35px 50px 50px 40px 50px 35px; gap: 5px; padding: 5px 8px; border-bottom: 1px solid #21262d; align-items: center; font-size: 0.85em; }
   .tree-row:hover { background: #161b22; }
   .tree-header { font-weight: bold; color: #8b949e; font-size: 0.8em; text-transform: uppercase; border-bottom: 2px solid #30363d; }
   .indent { color: #484f58; }
@@ -354,12 +379,22 @@ const HTML = `<!DOCTYPE html>
   .waste-item .type { font-weight: bold; color: #d29922; }
   .waste-item.severe { background: #1c0808; border-color: #f85149; }
   .waste-item.severe .type { color: #f85149; }
+  .waste-item.info { background: #0d1117; border-color: #58a6ff; }
+  .waste-item.info .type { color: #58a6ff; }
   .dur { color: #8b949e; font-size: 0.85em; }
   .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
   .chart-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
   .chart-box h3 { font-size: 0.9em; color: #8b949e; margin-bottom: 10px; }
   .chart-box svg { width: 100%; height: 150px; }
   @media (max-width: 800px) { .charts { grid-template-columns: 1fr; } }
+  #flameChart { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+  #flameChart svg rect { cursor: pointer; }
+  #flameChart svg rect:hover { opacity: 0.8; }
+  .flame-scroll { overflow-x: auto; overflow-y: hidden; }
+  .flame-controls { margin-bottom: 8px; }
+  .flame-controls button { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .flame-controls button:hover { background: #30363d; }
+  #flameColorBy { margin-left: 10px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px 8px; font-size: 0.85em; }
   .chat-toggle { position: fixed; bottom: 20px; right: 20px; background: #238636; color: #fff; border: none; padding: 12px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,.4); z-index: 100; display: flex; align-items: center; gap: 4px; }
   .chat-toggle:hover { background: #2ea043; }
   .chat-toggle:disabled { background: #484f58; cursor: not-allowed; }
@@ -470,15 +505,37 @@ const searchEl = document.getElementById('search');
 const contentEl = document.getElementById('content');
 let allSessions = [];
 
+function updateURL() {
+  const params = new URLSearchParams();
+  if (projectEl.value) params.set('project', projectEl.value);
+  if (sessionEl.value) params.set('session', sessionEl.value);
+  const newURL = params.toString() ? '?' + params.toString() : location.pathname;
+  history.replaceState(null, '', newURL);
+}
+
 async function init() {
   try {
-    console.log('init() called');
+    const params = new URLSearchParams(location.search);
+    const urlProject = params.get('project');
+    const urlSession = params.get('session');
+    
     const projects = await api('/api/projects');
-    console.log('Got projects:', projects.length);
     for (const p of projects) {
       const o = document.createElement('option');
       o.value = p.id; o.textContent = p.id.slice(0, 8) + ' — ' + (p.directory || 'unknown');
       projectEl.appendChild(o);
+    }
+    
+    if (urlProject) {
+      projectEl.value = urlProject;
+      allSessions = await api('/api/sessions/' + urlProject);
+      renderSessionOptions(allSessions);
+      if (urlSession) {
+        sessionEl.value = urlSession;
+        chatToggle.disabled = false;
+        await loadTree();
+        pollInterval = setInterval(loadTree, 3000);
+      }
     }
   } catch(e) {
     console.error('init error:', e);
@@ -487,6 +544,7 @@ async function init() {
 
 projectEl.addEventListener('change', async () => {
   sessionEl.innerHTML = '<option value="">Select session...</option>';
+  updateURL();
   if (!projectEl.value) return;
   allSessions = await api('/api/sessions/' + projectEl.value);
   renderSessionOptions(allSessions);
@@ -510,6 +568,7 @@ function renderSessionOptions(sessions) {
 
 let pollInterval = null;
 let lastTreeJSON = '';
+let currentFlameEvents = [];
 
 async function loadTree() {
   if (!projectEl.value || !sessionEl.value) return;
@@ -517,6 +576,7 @@ async function loadTree() {
   const json = JSON.stringify(tree);
   if (json !== lastTreeJSON) {
     lastTreeJSON = json;
+    currentFlameEvents = tree.flameEvents || [];
     if (tree && tree.directory) {
       currentProjectDir = tree.directory;
       currentReferencedFiles = tree.referencedFiles || [];
@@ -529,7 +589,13 @@ async function loadTree() {
 sessionEl.addEventListener('change', async () => {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   lastTreeJSON = '';
-  if (!sessionEl.value) { contentEl.innerHTML = '<div class="empty">Select a session</div>'; return; }
+  updateURL();
+  if (!sessionEl.value) { 
+    contentEl.innerHTML = '<div class="empty">Select a session</div>'; 
+    chatToggle.disabled = true;
+    return; 
+  }
+  chatToggle.disabled = false;
   contentEl.innerHTML = '<div class="empty">Loading...</div>';
   await loadTree();
   pollInterval = setInterval(loadTree, 3000);
@@ -538,6 +604,7 @@ sessionEl.addEventListener('change', async () => {
 projectEl.addEventListener('change', () => {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   lastTreeJSON = '';
+  chatToggle.disabled = true;
 });
 
 function fmtDur(ms) {
@@ -564,7 +631,7 @@ function flatten(node, depth = 0, result = []) {
   return result;
 }
 
-function detectWaste(flat) {
+function detectWaste(flat, tree) {
   const warnings = [];
   for (const n of flat) {
     // Abandoned: has children or >0 msgs but 0 diffs and not a manager/readonly role
@@ -580,20 +647,85 @@ function detectWaste(flat) {
     if (!readOnly && n.messages > 5 && n.diffs === 0 && n.childCount === 0) {
       warnings.push({ type: 'Wasted Compute', severity: 'severe', detail: '<span class="agent-tag agent-' + (n.agent||'unknown').replace(/[^a-z-]/g,'') + '">' + (n.agent||'unknown') + '</span> — ' + n.messages + ' msgs with zero output. Tokens burned with no result.', id: n.id });
     }
-    // Duplicate PK calls: count project-knowledge children
-    if (n.agent === 'product-owner' || n.agent === 'architect') {
-      const pkChildren = flat.filter(c => c.agent === 'project-knowledge' && flat.some(p => p.id === n.id));
-      // Check via agents map instead
-      const pkSessions = (n.agents && n.agents['project-knowledge']) ? n.agents['project-knowledge'].messages : 0;
+    // High token ratio: >50:1 tokens to diff tokens (very inefficient)
+    const inTok = n.tokens?.input || 0;
+    const outTok = n.tokens?.output || 0;
+    const totalTok = inTok + outTok;
+    const diffTok = n.diffTokens || 0;
+    if (!readOnly && diffTok > 0 && totalTok / diffTok > 50) {
+      warnings.push({ type: 'Low Token Efficiency', severity: 'warn', detail: '<span class="agent-tag agent-' + (n.agent||'unknown').replace(/[^a-z-]/g,'') + '">' + (n.agent||'unknown') + '</span> — ' + Math.round(totalTok/diffTok) + ':1 token ratio. High context overhead for output produced.', id: n.id });
+    }
+    // Output-heavy: output tokens > input tokens (unusual, may indicate verbose generation)
+    if (outTok > inTok && outTok > 5000) {
+      warnings.push({ type: 'Output Heavy', severity: 'info', detail: '<span class="agent-tag agent-' + (n.agent||'unknown').replace(/[^a-z-]/g,'') + '">' + (n.agent||'unknown') + '</span> — ' + fmtNum(outTok) + ' output vs ' + fmtNum(inTok) + ' input. Unusually verbose generation.', id: n.id });
+    }
+    // Long session: >30 min duration
+    if (n.duration && n.duration > 30 * 60 * 1000) {
+      warnings.push({ type: 'Long Running', severity: 'info', detail: '<span class="agent-tag agent-' + (n.agent||'unknown').replace(/[^a-z-]/g,'') + '">' + (n.agent||'unknown') + '</span> — ' + fmtDur(n.duration) + ' duration. May indicate stuck or slow processing.', id: n.id });
     }
   }
   // Duplicate PK: count total PK sessions across tree
   const pkSessions = flat.filter(n => n.agent === 'project-knowledge');
   if (pkSessions.length > 2) {
-    warnings.push({ type: 'Duplicate Context Queries', severity: 'warn', detail: 'project-knowledge invoked ' + pkSessions.length + ' times across the tree. Consider context caching to reduce redundant queries.' });
+    warnings.push({ type: 'Duplicate Context Queries', severity: 'warn', detail: 'project-knowledge invoked ' + pkSessions.length + ' times. Consider context caching.' });
+  }
+  // Tool-heavy: check if any tool dominates (>60% of tool tokens)
+  if (tree.toolStats) {
+    const toolEntries = Object.entries(tree.toolStats);
+    const totalToolTok = toolEntries.reduce((s, [,t]) => s + t.inputTokens + t.outputTokens, 0);
+    for (const [tool, stats] of toolEntries) {
+      const toolTok = stats.inputTokens + stats.outputTokens;
+      if (totalToolTok > 10000 && toolTok / totalToolTok > 0.6) {
+        warnings.push({ type: 'Tool Dominance', severity: 'info', detail: '<span class="tool-name">' + tool + '</span> — ' + Math.round(toolTok/totalToolTok*100) + '% of tool tokens (' + fmtNum(toolTok) + '). May indicate over-reliance.' });
+      }
+      // Expensive tool: single tool >100k tokens
+      if (toolTok > 100000) {
+        warnings.push({ type: 'Expensive Tool', severity: 'warn', detail: '<span class="tool-name">' + tool + '</span> — ' + fmtNum(toolTok) + ' tokens across ' + stats.calls + ' calls. Consider optimizing usage.' });
+      }
+    }
+  }
+  // Deep nesting: >4 levels of delegation
+  const maxDepth = Math.max(...flat.map(n => n.depth), 0);
+  if (maxDepth > 4) {
+    warnings.push({ type: 'Deep Delegation', severity: 'warn', detail: maxDepth + ' levels of agent nesting. May indicate over-decomposition or delegation loops.' });
+  }
+  // Many human interventions
+  if (tree.humanMessages > 5) {
+    warnings.push({ type: 'High Human Intervention', severity: 'info', detail: tree.humanMessages + ' human inputs during session. May indicate unclear requirements or agent confusion.' });
+  }
+  // Inefficient reads (no offset/limit)
+  if (tree.inefficientReads && tree.inefficientReads.length > 0) {
+    const totalTok = tree.inefficientReads.reduce((s, r) => s + r.tokens, 0);
+    const byAgent = {};
+    for (const r of tree.inefficientReads) {
+      byAgent[r.agent] = (byAgent[r.agent] || 0) + 1;
+    }
+    const agentList = Object.entries(byAgent).map(function([a, c]) { return '<span class="agent-tag agent-' + (a||'unknown').replace(/[^a-z-]/g,'') + '">' + a + '</span>: ' + c; }).join(', ');
+    warnings.push({ type: 'Inefficient Reads', severity: 'warn', detail: tree.inefficientReads.length + ' full-file reads without offset/limit (' + fmtNum(totalTok) + ' tokens). ' + agentList + '. Use partial reads to reduce context.' });
   }
   return warnings;
 }
+
+let flameWidth = 2000;
+function flameZoom(factor) {
+  const inner = document.getElementById('flameInner');
+  if (!inner) return;
+  flameWidth = Math.max(800, Math.min(10000, flameWidth * factor));
+  inner.style.width = flameWidth + 'px';
+  const svg = inner.querySelector('svg');
+  if (svg) svg.setAttribute('width', flameWidth);
+}
+function flameReset() {
+  flameWidth = 2000;
+  const inner = document.getElementById('flameInner');
+  if (inner) {
+    inner.style.width = '2000px';
+    const svg = inner.querySelector('svg');
+    if (svg) svg.setAttribute('width', 2000);
+  }
+}
+
+function fmtNum(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'k' : n; }
 
 function renderDashboard(tree) {
   if (!tree) { contentEl.innerHTML = '<div class="empty">No data found</div>'; return; }
@@ -634,7 +766,7 @@ function renderDashboard(tree) {
   }
 
   // Waste detection
-  const warnings = detectWaste(flat);
+  const warnings = detectWaste(flat, tree);
 
   const maxMsgs = Math.max(...Object.values(agentAgg).map(a => a.messages), 1);
   const maxDiffs = Math.max(...Object.values(agentAgg).map(a => a.diffs), 1);
@@ -705,24 +837,31 @@ function renderDashboard(tree) {
   }
   html += '</div>';
 
+  // Flame chart
+  html += '<h2>Timeline <select id="flameColorBy" onchange="renderFlame()"><option value="type">Color by Type</option><option value="name">Color by Name</option></select></h2>';
+  html += '<div id="flameChart">' + renderFlameChart(tree.flameEvents, 'type') + '</div>';
+
   // Session tree
   html += '<h2>Session Tree</h2><div class="tree">';
-  html += '<div class="tree-row tree-header"><span>Session</span><span>Agent</span><span>Msgs <span class="tip" data-tip="Total messages in this session (red >40, yellow >20)">i</span></span><span>Diffs <span class="tip" data-tip="File changes produced by this session">i</span></span><span>Tokens <span class="tip" data-tip="Token usage (~ = estimated)">i</span></span><span>Ratio <span class="tip" data-tip="Total tokens / diff tokens — lower is more efficient">i</span></span><span>Duration <span class="tip" data-tip="Time from first to last message">i</span></span><span>Efficiency <span class="tip" data-tip="Messages per diff — lower is better. No output = wasted session.">i</span></span></div>';
+  html += '<div class="tree-row tree-header"><span>Session</span><span>Agent</span><span>Msgs</span><span>Diffs</span><span>Tools</span><span>In Tok</span><span>Out Tok</span><span>Ratio</span><span>Duration</span><span>Eff</span></div>';
   for (const node of flat) {
     const indent = '│ '.repeat(node.depth);
     const prefix = node.depth > 0 ? '├─ ' : '';
     const cls = 'agent-' + (node.agent || 'unknown').replace(/[^a-z-]/g, '');
-    const efficiency = node.diffs > 0 ? (node.messages / node.diffs).toFixed(1) + ' msg/diff' : '<span class="warn">no output</span>';
+    const efficiency = node.diffs > 0 ? (node.messages / node.diffs).toFixed(1) : '—';
     const msgClass = node.messages > 40 ? 'err' : node.messages > 20 ? 'warn' : 'msgs';
-    const nodeTok = (node.tokens?.input || 0) + (node.tokens?.output || 0);
+    const inTok = node.tokens?.input || 0;
+    const outTok = node.tokens?.output || 0;
     const nodeDiffTok = node.diffTokens || 0;
-    const nodeRatio = nodeDiffTok > 0 ? Math.round(nodeTok / nodeDiffTok) + ':1' : '—';
+    const nodeRatio = nodeDiffTok > 0 ? Math.round((inTok + outTok) / nodeDiffTok) + ':1' : '—';
     html += '<div class="tree-row">';
     html += '<span><span class="indent">' + indent + prefix + '</span>' + (node.title || node.id) + '</span>';
     html += '<span class="agent-tag ' + cls + '">' + (node.agent || '—') + '</span>';
     html += '<span class="' + msgClass + '">' + node.messages + '</span>';
     html += '<span class="diffs">' + (node.diffs || '—') + '</span>';
-    html += '<span>' + fmtTokens(node.tokens) + '</span>';
+    html += '<span>' + (node.toolCalls || '—') + '</span>';
+    html += '<span>' + fmtNum(inTok) + '</span>';
+    html += '<span>' + fmtNum(outTok) + '</span>';
     html += '<span>' + nodeRatio + '</span>';
     html += '<span class="dur">' + fmtDur(node.duration) + '</span>';
     html += '<span>' + efficiency + '</span>';
@@ -770,6 +909,11 @@ function renderDashboard(tree) {
   contentEl.innerHTML = html;
 }
 
+function renderFlame() {
+  const colorBy = document.getElementById('flameColorBy').value;
+  document.getElementById('flameChart').innerHTML = renderFlameChart(currentFlameEvents, colorBy);
+}
+
 function fmtNum(n) { return n >= 1000 ? (n/1000).toFixed(1) + 'k' : n; }
 
 function stat(val, label, tip) {
@@ -780,6 +924,79 @@ function stat(val, label, tip) {
 function agentColor(agent) {
   const colors = { 'product-owner': '#56d364', 'architect': '#58a6ff', 'orchestrator': '#d29922', 'system-engineer': '#bc8cff', 'ui-engineer': '#f778ba', 'fullstack-engineer': '#56d4d4', 'validator': '#d4d456', 'project-knowledge': '#7ee787', 'staff-engineer': '#ff7b72', 'shell': '#8b949e', 'debugger': '#ffa657', 'qa-engineer': '#d2a8ff', 'security-engineer': '#ff7b72', 'devops-engineer': '#3fb950', 'documentation-engineer': '#a5d6a7' };
   return colors[agent] || '#8b949e';
+}
+
+function flameColor(type, name, colorBy) {
+  if (colorBy === 'type') {
+    return type === 'agent' ? '#58a6ff' : '#f0883e';
+  }
+  // Color by name - hash to color
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return 'hsl(' + hue + ', 70%, 50%)';
+}
+
+function renderFlameChart(events, colorBy) {
+  if (!events || events.length < 1) return '<div class="empty">No timeline data</div>';
+  
+  const minT = Math.min(...events.map(e => e.start));
+  const maxT = Math.max(...events.map(e => e.end));
+  const range = maxT - minT || 1;
+  
+  // Group overlapping events into rows
+  const rows = [];
+  for (const e of events) {
+    let placed = false;
+    for (const row of rows) {
+      if (row.every(r => e.start >= r.end || e.end <= r.start)) {
+        row.push(e);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) rows.push([e]);
+  }
+  
+  const rowH = 22, pad = 2, w = 2000;
+  const h = rows.length * (rowH + pad) + 30;
+  
+  let html = '<div class="flame-container">';
+  html += '<div class="flame-controls">';
+  html += '<button onclick="flameZoom(1.5)">🔍+</button> ';
+  html += '<button onclick="flameZoom(0.67)">🔍−</button> ';
+  html += '<button onclick="flameReset()">Reset</button>';
+  html += '</div>';
+  html += '<div class="flame-scroll"><div id="flameInner" style="width:' + w + 'px">';
+  
+  let svg = '<svg width="' + w + '" height="' + h + '">';
+  
+  // Time axis
+  svg += '<line x1="0" y1="' + (h - 20) + '" x2="' + w + '" y2="' + (h - 20) + '" stroke="#30363d"/>';
+  const durSec = Math.round(range / 1000);
+  for (let i = 0; i <= 4; i++) {
+    const x = (i / 4) * w;
+    const t = Math.round((i / 4) * durSec);
+    const tLabel = t > 60 ? Math.round(t/60) + 'm' : t + 's';
+    svg += '<text x="' + x + '" y="' + (h - 5) + '" fill="#8b949e" font-size="10" text-anchor="' + (i === 0 ? 'start' : i === 4 ? 'end' : 'middle') + '">' + tLabel + '</text>';
+  }
+  
+  // Draw events
+  rows.forEach((row, ri) => {
+    const y = ri * (rowH + pad);
+    for (const e of row) {
+      const x = ((e.start - minT) / range) * w;
+      const ew = Math.max(((e.end - e.start) / range) * w, 3);
+      const color = flameColor(e.type, e.name, colorBy);
+      const label = e.name;
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + ew + '" height="' + rowH + '" fill="' + color + '" rx="2"><title>' + e.type + ': ' + e.name + ' (' + (e.end - e.start) + 'ms)</title></rect>';
+      if (ew > 60) svg += '<text x="' + (x + 4) + '" y="' + (y + 15) + '" fill="#fff" font-size="11" style="pointer-events:none">' + (label.length > 25 ? label.slice(0,22) + '...' : label) + '</text>';
+    }
+  });
+  
+  svg += '</svg>';
+  html += svg + '</div></div></div>';
+  return html;
 }
 
 function renderActivityChart(timeline) {
@@ -1069,8 +1286,9 @@ chatInput.addEventListener('keydown', e => {
 async function startChat() {
   if (!projectEl.value || !sessionEl.value) return;
   chatToggle.disabled = true;
-  chatToggle.textContent = '⏳ Starting...';
-  chatMessages.innerHTML = '<div class="chat-msg system">Connecting to Kiro...</div>';
+  chatLabel.textContent = '⏳ Starting...';
+  chatDropdown.style.display = 'none';
+  chatMessages.innerHTML = '<div class="chat-msg system">Connecting...</div>';
   
   try {
     const res = await fetch('/api/chat/start', {
@@ -1083,7 +1301,7 @@ async function startChat() {
     
     currentChatId = data.chatId;
     chatPanel.classList.add('open');
-    chatToggle.textContent = '💬 Chat Open';
+    chatLabel.textContent = '✕ Close Chat';
     chatToggle.disabled = false;
     chatMessages.innerHTML = '<div class="chat-msg system">Session loaded. Ask questions about this swarm session.</div>';
     
@@ -1105,7 +1323,8 @@ async function startChat() {
     };
   } catch (e) {
     chatMessages.innerHTML = '<div class="chat-msg system">Error: ' + e.message + '</div>';
-    chatToggle.textContent = '💬 Chat with Kiro';
+    chatLabel.textContent = '💬 Chat with ' + (chatProvider === 'kiro' ? 'Kiro' : 'OpenCode');
+    chatDropdown.style.display = '';
     chatToggle.disabled = false;
   }
 }
@@ -1122,7 +1341,8 @@ function closeChat() {
   currentChatId = null;
   chatEventSource = null;
   chatPanel.classList.remove('open');
-  chatToggle.textContent = '💬 Chat with Kiro';
+  chatLabel.textContent = '💬 Chat with ' + (chatProvider === 'kiro' ? 'Kiro' : 'OpenCode');
+  chatDropdown.style.display = '';
 }
 
 let lastAssistantEl = null;
@@ -1430,25 +1650,209 @@ function closeFileModal() {
 init();
 </script></body></html>`;
 
+function generateAIReport(tree) {
+  if (!tree) return 'No session data available.';
+  const flat = [];
+  function flattenTree(n, d = 0) { flat.push({ ...n, depth: d, childCount: (n.children || []).length }); (n.children || []).forEach(c => flattenTree(c, d + 1)); }
+  flattenTree(tree);
+  
+  const totalMsgs = flat.reduce((s, n) => s + n.messages, 0);
+  const totalDiffs = flat.reduce((s, n) => s + n.diffs, 0);
+  const totalInTok = tree.tokens?.input || 0;
+  const totalOutTok = tree.tokens?.output || 0;
+  const totalTok = totalInTok + totalOutTok;
+  const diffTok = tree.diffTokens || 0;
+  const ratio = diffTok > 0 ? Math.round(totalTok / diffTok) : 0;
+  
+  let report = `# Swarm Session Analytics Report
+
+<session_summary>
+  <title>${tree.title || tree.id}</title>
+  <sessions>${flat.length}</sessions>
+  <messages>${totalMsgs}</messages>
+  <diffs>${totalDiffs}</diffs>
+  <input_tokens>${totalInTok}</input_tokens>
+  <output_tokens>${totalOutTok}</output_tokens>
+  <diff_tokens>${diffTok}</diff_tokens>
+  <token_ratio>${ratio}:1</token_ratio>
+  <duration_ms>${tree.duration || 0}</duration_ms>
+  <human_inputs>${tree.humanMessages || 0}</human_inputs>
+</session_summary>
+
+## Session Tree
+
+| Session | Agent | Msgs | Diffs | In Tok | Out Tok | Ratio |
+|---------|-------|------|-------|--------|---------|-------|
+`;
+
+  for (const n of flat) {
+    const indent = '  '.repeat(n.depth);
+    const inT = n.tokens?.input || 0;
+    const outT = n.tokens?.output || 0;
+    const nRatio = n.diffTokens > 0 ? Math.round((inT + outT) / n.diffTokens) + ':1' : '—';
+    report += `| ${indent}${n.title || n.id.slice(0,8)} | ${n.agent || '—'} | ${n.messages} | ${n.diffs} | ${inT} | ${outT} | ${nRatio} |\n`;
+  }
+
+  // Agent summary
+  const agentAgg = {};
+  for (const n of flat) {
+    for (const [a, s] of Object.entries(n.agents || {})) {
+      if (!agentAgg[a]) agentAgg[a] = { messages: 0, diffs: 0, sessions: 0, inTok: 0, outTok: 0, diffTok: 0 };
+      agentAgg[a].messages += s.messages;
+      agentAgg[a].diffs += s.diffs;
+      agentAgg[a].sessions++;
+      if (s.tokens) { agentAgg[a].inTok += s.tokens.input || 0; agentAgg[a].outTok += s.tokens.output || 0; }
+      agentAgg[a].diffTok += s.diffTokens || 0;
+    }
+  }
+
+  report += `\n## Agent Summary\n\n<agents>\n`;
+  for (const [a, s] of Object.entries(agentAgg).sort((x, y) => y[1].messages - x[1].messages)) {
+    const aRatio = s.diffTok > 0 ? Math.round((s.inTok + s.outTok) / s.diffTok) : 0;
+    report += `  <agent name="${a}" calls="${s.sessions}" messages="${s.messages}" diffs="${s.diffs}" input_tokens="${s.inTok}" output_tokens="${s.outTok}" diff_tokens="${s.diffTok}" ratio="${aRatio}:1"/>\n`;
+  }
+  report += `</agents>\n`;
+
+  // Tool usage with duration
+  if (tree.toolStats && Object.keys(tree.toolStats).length > 0) {
+    const toolEntries = Object.entries(tree.toolStats).sort((a, b) => (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens));
+    const totalToolTok = toolEntries.reduce((s, [,t]) => s + t.inputTokens + t.outputTokens, 0);
+    const totalToolDur = toolEntries.reduce((s, [,t]) => s + (t.duration || 0), 0);
+    
+    report += `\n## Tool Usage\n\n<tools total_tokens="${totalToolTok}" total_duration_ms="${totalToolDur}">\n`;
+    for (const [tool, stats] of toolEntries) {
+      const pct = totalToolTok > 0 ? Math.round((stats.inputTokens + stats.outputTokens) / totalToolTok * 100) : 0;
+      report += `  <tool name="${tool}" calls="${stats.calls}" input_tokens="${stats.inputTokens}" output_tokens="${stats.outputTokens}" duration_ms="${stats.duration || 0}" percent="${pct}"/>\n`;
+    }
+    report += `</tools>\n`;
+  }
+
+  // Timeline - full event list
+  if (tree.flameEvents && tree.flameEvents.length > 0) {
+    const events = tree.flameEvents;
+    const minT = Math.min(...events.map(e => e.start));
+    const agentTime = events.filter(e => e.type === 'agent').reduce((s, e) => s + (e.end - e.start), 0);
+    const toolTime = events.filter(e => e.type === 'tool').reduce((s, e) => s + (e.end - e.start), 0);
+    
+    report += `\n## Timeline\n\n<timeline events="${events.length}" start_ms="${minT}" agent_time_ms="${agentTime}" tool_time_ms="${toolTime}">\n`;
+    for (const e of events) {
+      const offset = e.start - minT;
+      const dur = e.end - e.start;
+      let argsAttr = '';
+      if (e.type === 'tool' && e.args) {
+        const argsStr = JSON.stringify(e.args).replace(/"/g, '&quot;');
+        argsAttr = ` args="${argsStr}"`;
+      }
+      report += `  <event type="${e.type}" name="${e.name}" offset_ms="${offset}" duration_ms="${dur}"${e.agent && e.type === 'tool' ? ` agent="${e.agent}"` : ''}${argsAttr}/>\n`;
+    }
+    report += `</timeline>\n`;
+  }
+
+  // Waste detection
+  const readOnly = ['product-owner','orchestrator','project-knowledge','validator','code-search','dependency-analyzer','api-documentation'];
+  const warnings = [];
+  
+  for (const n of flat) {
+    const isRO = readOnly.includes(n.agent);
+    const inT = n.tokens?.input || 0;
+    const outT = n.tokens?.output || 0;
+    const nTok = inT + outT;
+    const nDiffTok = n.diffTokens || 0;
+    
+    if (!isRO && n.messages <= 2 && n.diffs === 0 && n.childCount === 0)
+      warnings.push({ type: 'abandoned_session', severity: 'warn', agent: n.agent, detail: `${n.messages} msgs, 0 diffs` });
+    if (!isRO && n.messages > 40)
+      warnings.push({ type: 'excessive_iteration', severity: 'severe', agent: n.agent, detail: `${n.messages} msgs for ${n.diffs} diffs` });
+    if (!isRO && n.messages > 5 && n.diffs === 0 && n.childCount === 0)
+      warnings.push({ type: 'wasted_compute', severity: 'severe', agent: n.agent, detail: `${n.messages} msgs with 0 output` });
+    if (!isRO && nDiffTok > 0 && nTok / nDiffTok > 50)
+      warnings.push({ type: 'low_efficiency', severity: 'warn', agent: n.agent, detail: `${Math.round(nTok/nDiffTok)}:1 ratio` });
+    if (outT > inT && outT > 5000)
+      warnings.push({ type: 'output_heavy', severity: 'info', agent: n.agent, detail: `${outT} out vs ${inT} in` });
+    if (n.duration && n.duration > 30 * 60 * 1000)
+      warnings.push({ type: 'long_running', severity: 'info', agent: n.agent, detail: `${Math.round(n.duration/60000)}m duration` });
+  }
+  
+  const pkCount = flat.filter(n => n.agent === 'project-knowledge').length;
+  if (pkCount > 2) warnings.push({ type: 'duplicate_context', severity: 'warn', detail: `project-knowledge called ${pkCount} times` });
+  
+  const maxDepth = Math.max(...flat.map(n => n.depth), 0);
+  if (maxDepth > 4) warnings.push({ type: 'deep_delegation', severity: 'warn', detail: `${maxDepth} nesting levels` });
+  
+  if (tree.humanMessages > 5) warnings.push({ type: 'high_intervention', severity: 'info', detail: `${tree.humanMessages} human inputs` });
+
+  // Tool-related waste
+  if (tree.toolStats) {
+    const toolEntries = Object.entries(tree.toolStats);
+    const totalToolTok = toolEntries.reduce((s, [,t]) => s + t.inputTokens + t.outputTokens, 0);
+    for (const [tool, stats] of toolEntries) {
+      const toolTok = stats.inputTokens + stats.outputTokens;
+      if (totalToolTok > 10000 && toolTok / totalToolTok > 0.6)
+        warnings.push({ type: 'tool_dominance', severity: 'info', tool, detail: `${Math.round(toolTok/totalToolTok*100)}% of tool tokens` });
+      if (toolTok > 100000)
+        warnings.push({ type: 'expensive_tool', severity: 'warn', tool, detail: `${Math.round(toolTok/1000)}k tokens across ${stats.calls} calls` });
+    }
+  }
+
+  // Inefficient reads
+  if (tree.inefficientReads && tree.inefficientReads.length > 0) {
+    const totalTok = tree.inefficientReads.reduce((s, r) => s + r.tokens, 0);
+    const byAgent = {};
+    for (const r of tree.inefficientReads) byAgent[r.agent] = (byAgent[r.agent] || 0) + 1;
+    warnings.push({ type: 'inefficient_read', severity: 'warn', detail: `${tree.inefficientReads.length} full-file reads (${Math.round(totalTok/1000)}k tokens), agents: ${Object.entries(byAgent).map(([a,c])=>`${a}:${c}`).join(', ')}` });
+  }
+
+  if (warnings.length > 0) {
+    report += `\n## Waste Detection\n\n<warnings count="${warnings.length}">\n`;
+    for (const w of warnings) {
+      report += `  <warning type="${w.type}" severity="${w.severity}"${w.agent ? ` agent="${w.agent}"` : ''}${w.tool ? ` tool="${w.tool}"` : ''}>${w.detail}</warning>\n`;
+    }
+    report += `</warnings>\n`;
+  }
+
+  // Interpretation guide
+  report += `
+## Interpretation Guide
+
+**Token Ratio**: Total tokens consumed / tokens written to files. Lower is more efficient.
+- <10:1 = Excellent efficiency
+- 10-30:1 = Normal for complex tasks
+- 30-50:1 = Consider optimization
+- >50:1 = Significant overhead, investigate
+
+**Severity Levels**:
+- severe: Immediate attention needed (wasted compute, excessive iteration)
+- warn: Optimization opportunity (low efficiency, abandoned sessions)
+- info: Informational (long running, output heavy)
+
+**Common Waste Patterns**:
+- abandoned_session: Started but produced nothing
+- excessive_iteration: >40 messages indicates thrashing
+- wasted_compute: Many messages with zero file output
+- low_efficiency: High token overhead for output produced
+- duplicate_context: Redundant project-knowledge queries
+- deep_delegation: Over-decomposition of tasks
+- inefficient_read: Full-file reads without offset/limit (use partial reads)
+`;
+
+  return report;
+}
+
 function generateReportContext(tree) {
+  // Shorter version for chat context
   if (!tree) return 'No session data available.';
   const flat = [];
   function flatten(n, d = 0) { flat.push({ ...n, depth: d }); (n.children || []).forEach(c => flatten(c, d + 1)); }
   flatten(tree);
   
-  let ctx = `# Swarm Session Report\n\n`;
-  ctx += `**Session:** ${tree.title || tree.id}\n`;
-  ctx += `**Total Messages:** ${flat.reduce((s, n) => s + n.messages, 0)}\n`;
-  ctx += `**Total Diffs:** ${flat.reduce((s, n) => s + n.diffs, 0)}\n`;
-  ctx += `**Tokens:** ${tree.tokens ? (tree.tokens.input + tree.tokens.output) + (tree.tokens.estimated ? ' (estimated)' : '') : 'N/A'}\n\n`;
+  const totalTok = (tree.tokens?.input || 0) + (tree.tokens?.output || 0);
+  const diffTok = tree.diffTokens || 0;
+  const ratio = diffTok > 0 ? Math.round(totalTok / diffTok) + ':1' : '—';
   
-  ctx += `## Session Tree\n`;
-  for (const n of flat) {
-    const indent = '  '.repeat(n.depth);
-    ctx += `${indent}- **${n.agent || 'unknown'}**: ${n.messages} msgs, ${n.diffs} diffs${n.tokens ? ', ' + (n.tokens.input + n.tokens.output) + ' tokens' : ''}\n`;
-  }
+  let ctx = `# Session: ${tree.title || tree.id}\n`;
+  ctx += `Sessions: ${flat.length} | Msgs: ${flat.reduce((s,n) => s+n.messages, 0)} | Diffs: ${flat.reduce((s,n) => s+n.diffs, 0)} | Tokens: ${totalTok} | Ratio: ${ratio}\n\n`;
   
-  ctx += `\n## Agent Summary\n`;
+  ctx += `## Agents\n`;
   const agentAgg = {};
   for (const n of flat) {
     for (const [a, s] of Object.entries(n.agents || {})) {
@@ -1459,7 +1863,7 @@ function generateReportContext(tree) {
     }
   }
   for (const [a, s] of Object.entries(agentAgg).sort((x, y) => y[1].messages - x[1].messages)) {
-    ctx += `- **${a}**: ${s.messages} msgs, ${s.diffs} diffs, ${s.tokens} tokens\n`;
+    ctx += `- ${a}: ${s.messages} msgs, ${s.diffs} diffs, ${s.tokens} tok\n`;
   }
   
   return ctx;
@@ -1471,6 +1875,19 @@ function handler(req, res) {
   if (url.pathname === '/' || url.pathname === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(HTML);
+  }
+  
+  if (url.pathname === '/ai') {
+    const projectID = url.searchParams.get('project');
+    const sessionID = url.searchParams.get('session');
+    if (!projectID || !sessionID) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      return res.end('Missing project or session parameter. Usage: /ai?project=<id>&session=<id>');
+    }
+    const tree = buildTree(projectID, sessionID);
+    const report = generateAIReport(tree);
+    res.writeHead(200, { 'Content-Type': 'text/markdown' });
+    return res.end(report);
   }
 
   if (url.pathname === '/api/projects') {
@@ -1524,43 +1941,25 @@ function handler(req, res) {
       try {
         const { projectID, sessionID, provider } = JSON.parse(body);
         const tree = buildTree(projectID, sessionID);
-        const context = generateReportContext(tree);
+        const report = generateAIReport(tree);
         const chatId = 'chat_' + Date.now();
         
         const cmd = provider === 'kiro' ? 'kiro-cli' : 'opencode';
-        const args = provider === 'kiro' ? ['chat'] : ['chat', '-p'];
+        const args = provider === 'kiro' ? ['chat'] : ['run', '--format', 'json'];
         
         const proc = spawn(cmd, args, {
-          cwd: KIRO_CWD,
+          cwd: tree.directory || KIRO_CWD,
           env: { ...process.env, TERM: 'dumb' },
           stdio: ['pipe', 'pipe', 'pipe']
         });
         
-        chatSessions.set(chatId, { proc, clients: [], buffer: '' });
-        
-        // Send initial context
-        const initPrompt = `You are analyzing an OpenCode swarm session. Here is the session report:\n\n${context}\n\nThe user will ask questions about this session. Answer based on the data provided. Be concise.\n\nReady to answer questions about this session.`;
-        proc.stdin.write(initPrompt + '\n');
-        
-        proc.stdout.on('data', data => {
-          const session = chatSessions.get(chatId);
-          if (session) {
-            const text = data.toString();
-            session.buffer += text;
-            session.clients.forEach(c => c.write(`data: ${JSON.stringify({ text })}\n\n`));
-          }
-        });
-        
-        proc.stderr.on('data', data => {
-          console.error('kiro stderr:', data.toString());
-        });
-        
-        proc.on('close', () => {
-          const session = chatSessions.get(chatId);
-          if (session) {
-            session.clients.forEach(c => { c.write('data: {"done":true}\n\n'); c.end(); });
-            chatSessions.delete(chatId);
-          }
+        // Store context for subsequent messages
+        chatSessions.set(chatId, { 
+          clients: [], 
+          context: report, 
+          provider,
+          cwd: tree.directory || KIRO_CWD,
+          history: []
         });
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1585,8 +1984,69 @@ function handler(req, res) {
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'Chat session not found' }));
         }
-        session.buffer = '';
-        session.proc.stdin.write(message + '\n');
+        
+        // Build prompt with context and history
+        let prompt = `You are analyzing an OpenCode swarm session. Here is the analytics report:\n\n${session.context}\n\n`;
+        if (session.history.length > 0) {
+          prompt += `Previous conversation:\n`;
+          for (const h of session.history.slice(-6)) { // Keep last 3 exchanges
+            prompt += `User: ${h.user}\nAssistant: ${h.assistant}\n`;
+          }
+          prompt += `\n`;
+        }
+        prompt += `User question: ${message}\n\nAnswer concisely based on the data:`;
+        
+        const cmd = session.provider === 'kiro' ? 'kiro-cli' : 'opencode';
+        const args = session.provider === 'kiro' 
+          ? ['chat', '--no-interactive', '--trust-all-tools', prompt] 
+          : ['run', '--format', 'json', prompt];
+        
+        const proc = spawn(cmd, args, {
+          cwd: session.cwd,
+          env: { ...process.env, TERM: 'dumb', NO_COLOR: '1', FORCE_COLOR: '0' },
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        
+        let output = '';
+        
+        proc.stdout.on('data', data => {
+          let text = data.toString();
+          // Strip ANSI escape sequences for kiro
+          if (session.provider === 'kiro') {
+            // eslint-disable-next-line no-control-regex
+            text = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+            text = text.replace(/\r/g, '');
+          }
+          output += text;
+          // For kiro, send text directly; for opencode, parse JSON
+          if (session.provider === 'kiro') {
+            session.clients.forEach(c => c.write(`data: ${JSON.stringify({ text })}\n\n`));
+          } else {
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const evt = JSON.parse(line);
+                if (evt.type === 'text' && evt.content) {
+                  session.clients.forEach(c => c.write(`data: ${JSON.stringify({ text: evt.content })}\n\n`));
+                }
+              } catch {
+                session.clients.forEach(c => c.write(`data: ${JSON.stringify({ text: line + '\n' })}\n\n`));
+              }
+            }
+          }
+        });
+        
+        proc.stderr.on('data', data => {
+          console.error('chat stderr:', data.toString());
+        });
+        
+        proc.on('close', () => {
+          // Save to history
+          session.history.push({ user: message, assistant: output });
+          session.clients.forEach(c => c.write('data: {"done":true}\n\n'));
+        });
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -1611,10 +2071,6 @@ function handler(req, res) {
       'Connection': 'keep-alive'
     });
     session.clients.push(res);
-    // Send buffered content
-    if (session.buffer) {
-      res.write(`data: ${JSON.stringify({ text: session.buffer })}\n\n`);
-    }
     req.on('close', () => {
       session.clients = session.clients.filter(c => c !== res);
     });
@@ -1629,8 +2085,7 @@ function handler(req, res) {
       const { chatId } = JSON.parse(body);
       const session = chatSessions.get(chatId);
       if (session) {
-        session.proc.stdin.write('/quit\n');
-        session.proc.kill();
+        session.clients.forEach(c => { try { c.end(); } catch {} });
         chatSessions.delete(chatId);
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });

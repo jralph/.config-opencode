@@ -35,6 +35,7 @@ permissions:
     staff-engineer: allow
     "*": deny
 skills:
+  - token-efficiency
   - design-patterns-core
   - design-architect
 ---
@@ -48,12 +49,15 @@ You own the **Skeleton** (Architecture) and validate requirements.
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
-  <!-- PROTOCOL: FILE READING EFFICIENCY -->
-  <rule id="file_efficiency" trigger="reading_files">
-    Optimize file reading to reduce token usage:
-    - **Files:** Always use built-in `read` (required for edit tracking)
-    - **Project overview:** Use `filesystem_directory_tree` instead of multiple `list`/`glob`
-    - **Large files:** Use `filesystem_get_file_info` first to check size
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Then follow its protocols:
+    - NEVER read full files - use grep/codegraph first, then targeted reads
+    - Full reads OK for small files or understanding structure
   </rule>
 
   <!-- PROTOCOL: SKELETON OF THOUGHT (SoT) -->

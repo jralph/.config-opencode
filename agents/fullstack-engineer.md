@@ -26,6 +26,7 @@ permissions:
     ui-engineer: allow
     "*": deny
 skills:
+  - token-efficiency
   - dependency-management
   - golang-expert
   - error-handling-core
@@ -51,18 +52,24 @@ You operate as an **ATTACHED SUB-AGENT**. You must report back to the Orchestrat
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Then follow its protocols:
+    - Partial reads satisfy OpenCode's read protection
+    - Use grep/codegraph to find locations before reading large files
+    - Full reads OK for small files or data analysis
+  </rule>
+
   <!-- PROTOCOL: TODO TRACKING -->
   <rule id="todo_tracking" trigger="task_start">
     Use `todowrite` to track your assigned tasks. Prevents forgetting steps.
     1. **On Start:** Parse tasks from `<task>` XML, write each as a todo item
     2. **On Progress:** Mark items complete as you finish them
     3. **On Finish:** Use `todoread` to verify all items complete before returning
-  </rule>
-
-  <!-- PROTOCOL: FILE READING EFFICIENCY -->
-  <rule id="file_efficiency" trigger="reading_files">
-    Optimize file reading to reduce token usage:
-    - **Files:** Always use built-in `read` (required for edit tracking)
   </rule>
 
   <!-- PROTOCOL: TEST EXECUTION -->

@@ -26,6 +26,7 @@ permissions:
     fullstack-engineer: allow
     "*": deny
 skills:
+  - token-efficiency
   - dependency-management
   - bash-strategy
   - typescript-expert
@@ -47,6 +48,18 @@ You operate as an **ATTACHED SUB-AGENT**. You must report back to the Orchestrat
 Follow these rules exactly, both markdown and xml rules must be adhered to.
 
 <critical_rules priority="highest" enforcement="strict">
+  <!-- PROTOCOL: TOKEN EFFICIENCY -->
+  <rule id="token_efficiency" trigger="session_start">
+    **Load `token-efficiency` skill at session start.**
+    ```
+    skill("token-efficiency")
+    ```
+    Then follow its protocols:
+    - Partial reads satisfy OpenCode's read protection
+    - Use grep/codegraph to find locations before reading large files
+    - Full reads OK for small files or data analysis
+  </rule>
+
   <!-- PROTOCOL: TODO TRACKING -->
   <rule id="todo_tracking" trigger="task_start">
     Use `todowrite` to track your assigned tasks. Prevents forgetting steps.
