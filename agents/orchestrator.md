@@ -45,6 +45,7 @@ permissions:
     code-search: allow
     dependency-analyzer: allow
     debugger: allow
+    shell: allow
     "*": deny
 ---
 

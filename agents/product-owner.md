@@ -24,6 +24,7 @@ permissions:
     project-knowledge: allow
     staff-engineer: allow
     debugger: allow
+    shell: allow
     "*": deny
   read: 
     - "README.md"
@@ -90,7 +91,22 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     
     CRITICAL DELEGATION RULES (choose the RIGHT agent):
     
-    1. **DEBUGGER** - Use for runtime issues:
+    1. **SHELL** - Use for running commands:
+       - "Run make install"
+       - "Check git status"
+       - "Show me the test output"
+       - "What version of Go is installed?"
+       → Call: `task("shell")` with XML:
+       ```xml
+       <shell>
+         <command>[command]</command>
+         <output>summary</output>
+       </shell>
+       ```
+       Use `errors` if you only need to know if it passed/failed.
+       Use `summary` for most requests. Use `full` only if you or the user explicitly needs complete output.
+    
+    2. **DEBUGGER** - Use for runtime issues:
        - "Tests are failing"
        - "App crashes when..."
        - "Getting error: [error message]"
