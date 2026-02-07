@@ -38,7 +38,10 @@
     "mcp": "allow",
     "memory_append": "allow",  // Agents can autonomously add memories
     "memory_replace": "ask",   // Safety: Ask before REWRITING memory
-    "memory_read": "allow"
+    "memory_read": "allow",
+    "external_directory": {
+      "/tmp/**": "allow"
+    }
   },
   "mcp": {
     "go-design-patterns": {

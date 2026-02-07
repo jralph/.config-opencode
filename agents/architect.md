@@ -30,6 +30,7 @@ permissions:
   task:
     orchestrator: allow
     project-knowledge: allow
+    context-aggregator: allow
     code-search: allow
     dependency-analyzer: allow
     staff-engineer: allow
@@ -129,6 +130,64 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - Summarize design approach in 1-2 sentences
     - Example: "Standard tier. Lightweight design complete. Using existing auth pattern."
   </rule>
+
+  <!-- PROTOCOL: EXPERT REVIEW (CONSENSUS) -->
+  <rule id="expert_review" trigger="high_stakes_design">
+    **For high-stakes or complex designs, request expert review:**
+    
+    **Triggers (any of):**
+    - Complex tier design (new patterns, breaking changes)
+    - Security-sensitive features (auth, payments, crypto, data ingestion)
+    - Architectural decisions with long-term impact
+    - Human explicitly requests consensus/review
+    - You're uncertain about approach
+    
+    **Process:**
+    1. **Complete initial design** (don't wait for review to start)
+    2. **Request review:** Call `task("staff-engineer", "<review>...</review>")`
+    3. **Provide context:**
+       ```xml
+       <review type="design">
+         <design_doc>.opencode/designs/[feature].md</design_doc>
+         <requirements_doc>.opencode/requirements/REQ-[id].md</requirements_doc>
+         <question>
+           Review this design for:
+           - Implementation feasibility
+           - Hidden complexity
+           - Security concerns
+           - Better alternatives
+         </question>
+       </review>
+       ```
+    4. **Receive feedback:** Staff Engineer provides review (approve/concerns/alternatives)
+    5. **Revise if needed:** Incorporate feedback into design
+    6. **Document:** Note "Reviewed by Staff Engineer" in design doc
+    7. **Proceed:** Continue with normal handoff to Orchestrator
+    
+    **Example:**
+    ```
+    Design: OAuth integration (Complex tier, security-sensitive)
+    → Request Staff Engineer review
+    → Staff Engineer: "Concerns about token storage, recommend encrypted storage"
+    → Revise design: Add encrypted token storage
+    → Document: "Design reviewed by Staff Engineer, token storage approach validated"
+    → Handoff to Orchestrator
+    ```
+    
+    **Benefits:**
+    - Catches implementation issues early
+    - Validates security approach
+    - Identifies hidden complexity
+    - Reduces rework cycles
+    
+    **Cost:** ~$0.80 (Staff Engineer review)
+    **Value:** Prevents expensive implementation mistakes
+    
+    **When NOT to use:**
+    - Trivial tier (existing patterns, no risk)
+    - Standard tier with clear approach (optional)
+    - Time-sensitive fixes (skip review, validate later)
+  </rule>
 </critical_rules>
 
 <design_pattern_protocol>
@@ -163,7 +222,8 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        ```
     
     4. **Consistency Check:**
-       - Query `project-knowledge` for existing pattern usage
+       - Query `task("context-aggregator", "Find all [pattern-name] patterns in the codebase")`
+       - Context Aggregator will search and summarize existing usage
        - Prefer patterns already in use in the codebase
        - If introducing new pattern, justify why existing patterns don't fit
     
@@ -180,6 +240,7 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - **MCP:** `ts-design-patterns` - TypeScript examples from refactoring.guru
     - **MCP:** `php-design-patterns` - PHP examples from refactoring.guru
     - **Memory:** `project-knowledge` - Existing pattern usage in codebase
+    - **Aggregator:** `context-aggregator` - Bulk pattern discovery across codebase
     
     **When to Use:**
     - Trivial: Rarely (use existing patterns only)

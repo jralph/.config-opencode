@@ -6,6 +6,13 @@ This repository contains a sophisticated multi-agent system built on [OpenCode](
 
 Our setup uses a **protocol-driven agent swarm** with clear separation of concerns, human approval gates, and reusable skills. The system follows a structured workflow from requirements gathering through implementation to validation.
 
+**Two ways to work:**
+
+1. **Dev Agent** - Conversational assistant for direct work (quick tasks, exploration, general help)
+2. **Agent Swarm** - Formal workflows for features (requirements, design, validation, quality gates)
+
+Choose based on your needs: Dev for speed and flexibility, Swarm for structure and quality gates.
+
 ## Architecture
 
 ### Agent Flow
@@ -82,7 +89,34 @@ flowchart TD
 
 ## Agents
 
-### Primary Agents
+### Primary Agents (Human-Facing)
+
+#### Dev (`dev.md`)
+**Role**: Conversational development assistant (outside the swarm)  
+**Mode**: Primary  
+**Model**: Claude Opus 4.6
+
+**What Dev Does**:
+- Full development work (read/write code, debug, refactor, test)
+- Answer questions about code and the swarm
+- Quick implementations (any size)
+- Architecture advice and guidance
+- Explain swarm agents and workflows
+- Interpret swarm output (validation reports, design docs)
+
+**When to Use Dev**:
+- Quick tasks and implementations
+- Exploratory work
+- Questions and explanations
+- Informal development
+- Learning about the swarm
+
+**Key Traits**:
+- Conversational, not rigid (no XML protocols)
+- Direct and honest (no flattery)
+- Minimal code philosophy (only what's needed)
+- Cannot invoke other agents (works independently)
+- Full capability (no file limits)
 
 #### Product Owner (`product-owner.md`)
 **Role**: Requirements gathering and EARS validation  
@@ -95,6 +129,12 @@ flowchart TD
 3. **Translate**: Convert user request to EARS format (Trigger → Response)
 4. **Document**: Write `.opencode/requirements/REQ-[id].md`
 5. **Gate**: Get human approval before handoff
+
+**When to Use Product Owner**:
+- Formal feature requests
+- Need requirements documentation
+- Want human approval gates
+- Structured validation workflow
 
 **Responsibilities**:
 - Transform user requests into EARS-formatted requirements

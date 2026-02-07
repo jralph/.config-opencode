@@ -43,6 +43,7 @@ permissions:
     documentation-engineer: allow
     validator: allow
     project-knowledge: allow
+    context-aggregator: allow
     code-search: allow
     dependency-analyzer: allow
     debugger: allow

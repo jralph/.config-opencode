@@ -122,6 +122,25 @@ When called with `<query type="completion_check">`:
    **Resume from:** Task 2
    ```
 
+# PROTOCOL: REQUIREMENTS STATUS CHECK (For Product Owner)
+When asked "List all requirements and their implementation status":
+1. **Find Requirements:** Use `glob` to find all `.opencode/requirements/REQ-*.md` files
+2. **Check Each Requirement:**
+   - Read file to get current `status` from frontmatter
+   - If status is `in_progress`, verify completion:
+     * Use `glob` to check for validation reports in `.opencode/validations/`
+     * Use `github` tool to check if related branch was merged
+     * Use `filesystem_search_files` to find related task docs
+3. **Return Status:**
+   ```
+   ## Requirements Status
+   - REQ-001: complete (merged to main)
+   - REQ-002: in_progress → should be complete (validation passed, branch merged)
+   - REQ-003: in_progress (active development)
+   - REQ-004: approved (not started)
+   ```
+4. **Recommend Updates:** List which requirements should have status changed to `complete`
+
 # PROTOCOL: HEALTH CHECK (Status)
 When asked for a "Status Check" or "Health Check":
 1.  **VERIFY GRAPH:** Do **NOT** use `get_repository_stats` (it is unstable).

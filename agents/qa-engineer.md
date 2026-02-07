@@ -1,7 +1,7 @@
 ---
 description: Specialist in writing Unit, Integration, and Property-Based tests.
 mode: subagent
-model: kiro/claude-sonnet-4-5
+model: kimi-for-coding/k2p5
 maxSteps: 25
 tools:
   task: true

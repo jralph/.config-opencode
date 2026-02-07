@@ -62,8 +62,11 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 
   <!-- PROTOCOL: TODO TRACKING -->
   <rule id="todo_tracking" trigger="task_start">
-    Use `todowrite` to track your assigned tasks. Prevents forgetting steps.
-    1. **On Start:** Parse tasks from `<task>` XML, write each as a todo item
+    **MANDATORY:** Use `todowrite` tool to track your assigned tasks. Prevents forgetting steps.
+    
+    **FORBIDDEN:** Do NOT create temporary files (`/tmp/todos.json`, etc.) or use bash for task tracking.
+    
+    1. **On Start:** Parse tasks from `<task>` XML, write each as a todo item using `todowrite`
     2. **On Progress:** Mark items complete as you finish them
     3. **On Finish:** Use `todoread` to verify all items complete before returning
   </rule>

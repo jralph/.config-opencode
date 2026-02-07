@@ -22,6 +22,7 @@ permissions:
     architect: allow
     orchestrator: allow
     project-knowledge: allow
+    context-aggregator: allow
     staff-engineer: allow
     debugger: allow
     shell: allow
@@ -88,6 +89,35 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <rule id="code_quarantine" trigger="always">
     STRICTLY FORBIDDEN from reading or writing source code (.ts, .py, .go, .js, Makefile etc.).
     STRICTLY FORBIDDEN from running shell commands.
+  </rule>
+
+  <!-- PROTOCOL: CONTEXT DELEGATION -->
+  <rule id="context_delegation" trigger="feature_request">
+    **MINIMIZE direct file reading. Delegate context gathering to specialists.**
+    
+    **Before reading files yourself:**
+    1. **Project Context:** Call `task("context-aggregator", "Get context for [feature]")`
+       - Returns: Relevant files, patterns, constraints, project structure
+       - Avoids: Reading multiple files yourself
+       - Uses: 1M context window to load entire codebase
+    
+    2. **Requirements Status:** Call `task("context-aggregator", "List all requirements and their status")`
+       - Returns: Complete/in-progress/approved/draft breakdown
+       - Avoids: Reading all requirement files individually
+    
+    3. **Technical Feasibility:** Call `task("staff-engineer", "Check feasibility of [request]")`
+       - Returns: Technical assessment, risks, recommendations
+       - Avoids: Reading code to understand complexity
+    
+    **Only read directly:**
+    - User-facing docs (README.md, docs/*)
+    - Package metadata (package.json, go.mod)
+    - Single specific requirement file when updating it
+    
+    **Rationale:** PO had 45 full-file reads in one session = context pollution
+  </rule>
+
+  <!-- The Air Gap Rule (continued) -->
     
     CRITICAL DELEGATION RULES (choose the RIGHT agent):
     
@@ -164,6 +194,23 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - Be direct and actionable
     - Summarize what happens next
     - Example: "Requirements documented. Delegated to Architect for design."
+  </rule>
+
+  <!-- PROTOCOL: REQUIREMENTS COMPLETION CHECK -->
+  <rule id="requirements_completion" trigger="task_finish">
+    Before finishing any task, check all requirements files for completion status:
+    1. **Query:** Call `task("context-aggregator", "List all requirements and their implementation status")`
+    2. **Review:** Context Aggregator will check git history, validation reports, and merge status
+    3. **Update:** For each completed requirement, update its status:
+       - Use `read` to get current file
+       - Use `edit` to change `status: in_progress` to `status: complete`
+    4. **Report:** Summarize completion status to user
+    
+    Status values:
+    - `draft` - Requirements being written
+    - `approved` - Human approved, ready for implementation
+    - `in_progress` - Currently being implemented
+    - `complete` - Implementation finished and merged
   </rule>
 </critical_rules>
 

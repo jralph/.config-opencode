@@ -1,7 +1,7 @@
 ---
 description: Strict gatekeeper for code quality and requirements. Returns PASS/WARN/FAIL.
 mode: all
-model: kiro/claude-opus-4-6
+model: kimi-for-coding/k2p5
 maxSteps: 40
 tools:
   task: true
@@ -15,6 +15,7 @@ permissions:
   bash: allow       # Autonomous: Run 'npm test'
   edit: deny        # HARD BLOCK: Validator cannot change code, only report
   task:
+    context-aggregator: allow # Get validation history summaries
     staff-engineer: allow # Can report "Critical Failure" to trigger rollback
     code-search: allow    # Find test coverage, related code
     "*": deny
@@ -105,6 +106,32 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - Full reads OK for small files
   </rule>
 
+  <!-- PROTOCOL: EFFICIENT FILE READING -->
+  <rule id="efficient_reading" trigger="file_read">
+    **CRITICAL: Use partial reads, NOT full-file reads.**
+    
+    **FORBIDDEN:** Reading entire files with `read(path)`
+    
+    **REQUIRED:**
+    1. **For validation:** Read specific sections using line ranges
+    2. **For test output:** Read last 100 lines (tail)
+    3. **For error context:** Read ±20 lines around error line
+    4. **For diffs:** Request file diffs from orchestrator, not full files
+    
+    **Example:**
+    ```
+    # WRONG
+    read("src/utils.ts")
+    
+    # RIGHT
+    read("src/utils.ts:1-50")        # First 50 lines
+    read("src/utils.ts:-100")        # Last 100 lines
+    read("src/utils.ts:45-65")       # Around error line 55
+    ```
+    
+    **Rationale:** 303 full-file reads per session = massive token waste
+  </rule>
+
   <!-- The Verdict Rule -->
   <rule id="verdict_logic" trigger="always">
     OUTPUT one of three verdicts:
@@ -143,13 +170,17 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
 
   <rule id="validation_type" trigger="start">
     **IF `type="incremental"`:**
-    1. Read `<prior_validations>` directory for context (what already passed)
+    1. **Get Prior Context:** Call `task("context-aggregator", "Summarize all validation reports for TASKS-[id]")`
+       - Returns: Summary of what passed/warned/failed in prior phases
+       - Avoids: Reading 20+ validation files individually
     2. Focus ONLY on `<tasks>` listed - do not re-validate prior phases
-    3. Validate only `<files>` listed
+    3. Validate only `<files>` listed (use partial reads with line ranges)
     4. Write result to `.opencode/validations/TASKS-[id]/phase-[N].md`
     
     **IF `type="integration"`:**
-    1. Read ALL files in `<prior_validations>` directory
+    1. **Get Full Context:** Call `task("context-aggregator", "Summarize all validation reports for TASKS-[id]")`
+       - Returns: Complete validation history across all phases
+       - Avoids: Reading ALL validation files individually
     2. Skip per-task checks (already done)
     3. Focus on cross-phase integration: imports, interfaces, data flow
     4. Run full test suite

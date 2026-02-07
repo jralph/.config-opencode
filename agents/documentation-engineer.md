@@ -1,7 +1,7 @@
 ---
 description: Sub-agent for creating and maintaining READMEs and docs.
 mode: subagent
-model: google/gemini-3-pro-preview
+model: kimi-for-coding/k2p5
 maxSteps: 20
 tools:
   task: true

@@ -1,7 +1,10 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { countTokens } = require('@anthropic-ai/tokenizer');
 
 const STORAGE = path.join(process.env.HOME, '.local/share/opencode/storage');
 const SESSION_DIR = path.join(STORAGE, 'session');
@@ -9,6 +12,88 @@ const MESSAGE_DIR = path.join(STORAGE, 'message');
 const PART_DIR = path.join(STORAGE, 'part');
 const PORT = process.env.PORT || 3847;
 const KIRO_CWD = process.env.KIRO_CWD || path.join(process.env.HOME, '.config/opencode');
+
+// Token cache: hash -> token count
+const CACHE_FILE = path.join(STORAGE, '.token-cache.json');
+let tokenCache = {};
+try { tokenCache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch {}
+
+// Model pricing cache
+const PRICING_FILE = path.join(STORAGE, '.model-pricing.json');
+let pricingCache = { models: {}, fetched: 0 };
+try { pricingCache = JSON.parse(fs.readFileSync(PRICING_FILE, 'utf8')); } catch {}
+
+async function fetchPricing() {
+  // Refresh if older than 24h
+  if (Date.now() - pricingCache.fetched < 86400000 && Object.keys(pricingCache.models).length > 0) return pricingCache.models;
+  
+  return new Promise((resolve) => {
+    https.get('https://openrouter.ai/api/v1/models', (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const models = {};
+          for (const m of json.data || []) {
+            if (m.pricing) {
+              models[m.id] = { prompt: parseFloat(m.pricing.prompt) || 0, completion: parseFloat(m.pricing.completion) || 0 };
+            }
+          }
+          pricingCache = { models, fetched: Date.now() };
+          fs.writeFileSync(PRICING_FILE, JSON.stringify(pricingCache));
+          resolve(models);
+        } catch { resolve(pricingCache.models); }
+      });
+    }).on('error', () => resolve(pricingCache.models));
+  });
+}
+
+// Model name mapping (our names -> OpenRouter names)
+const MODEL_MAP = {
+  'claude-opus-4-6': 'anthropic/claude-opus-4.6',
+  'claude-opus-4-5': 'anthropic/claude-opus-4.5',
+  'claude-sonnet-4-5': 'anthropic/claude-sonnet-4.5',
+  'claude-sonnet-4': 'anthropic/claude-sonnet-4',
+  'claude-haiku-4-5': 'anthropic/claude-haiku-4.5',
+  'gemini-3-pro-preview': 'google/gemini-2.5-pro-preview',
+  'gemini-2.5-pro': 'google/gemini-2.5-pro-preview',
+  'gpt-4o': 'openai/gpt-4o',
+  'gpt-4-turbo': 'openai/gpt-4-turbo',
+  'k2p5': 'moonshotai/kimi-k2',
+};
+
+function lookupPricing(modelKey) {
+  const [provider, model] = modelKey.split('/');
+  // Try direct match first
+  if (pricingCache.models[modelKey]) return pricingCache.models[modelKey];
+  // Try mapped name
+  const mapped = MODEL_MAP[model];
+  if (mapped && pricingCache.models[mapped]) return pricingCache.models[mapped];
+  // Try fuzzy match
+  for (const [id, pricing] of Object.entries(pricingCache.models)) {
+    if (id.includes(model) || model.includes(id.split('/')[1])) return pricing;
+  }
+  return null;
+}
+
+function saveCache() {
+  try { fs.writeFileSync(CACHE_FILE, JSON.stringify(tokenCache)); } catch {}
+}
+
+// Debounced cache save
+let cacheDirty = false;
+setInterval(() => { if (cacheDirty) { saveCache(); cacheDirty = false; } }, 5000);
+
+function cachedCountTokens(text) {
+  if (!text) return 0;
+  const hash = crypto.createHash('md5').update(text).digest('hex');
+  if (tokenCache[hash] !== undefined) return tokenCache[hash];
+  const count = countTokens(text);
+  tokenCache[hash] = count;
+  cacheDirty = true;
+  return count;
+}
 
 // Active chat sessions: Map<sessionId, {proc, clients[]}>
 const chatSessions = new Map();
@@ -50,7 +135,10 @@ function getSwarmFiles(projectDir) {
   listDir(reqDir).filter(f => f.endsWith('.md')).forEach(f => {
     const content = readFile(path.join(reqDir, f));
     const { frontmatter, body } = parseYamlFrontmatter(content);
-    result.requirements.push({ file: f, path: `.opencode/requirements/${f}`, ...frontmatter, preview: body?.slice(0, 200) });
+    // Also parse status from markdown body (e.g., **Status:** Complete or **Status:** In Progress)
+    const statusMatch = content.match(/\*\*Status:\*\*\s*([^\n*]+)/i);
+    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+    result.requirements.push({ file: f, path: `.opencode/requirements/${f}`, ...frontmatter, status, preview: body?.slice(0, 200) });
   });
   
   // Designs
@@ -58,7 +146,10 @@ function getSwarmFiles(projectDir) {
   listDir(designDir).filter(f => f.endsWith('.md')).forEach(f => {
     const content = readFile(path.join(designDir, f));
     const { frontmatter } = parseYamlFrontmatter(content);
-    result.designs.push({ file: f, path: `.opencode/designs/${f}`, ...frontmatter });
+    // Also parse status from markdown body
+    const statusMatch = content.match(/\*\*Status:\*\*\s*([^\n*]+)/i);
+    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+    result.designs.push({ file: f, path: `.opencode/designs/${f}`, ...frontmatter, status });
   });
   
   // Tasks/Plans
@@ -103,10 +194,49 @@ function getSwarmFiles(projectDir) {
 }
 
 function getProjects() {
-  return fs.readdirSync(SESSION_DIR).filter(d => d !== 'global' && !d.startsWith('.'));
+  const projects = fs.readdirSync(SESSION_DIR).filter(d => d !== 'global' && !d.startsWith('.'));
+  
+  // Also check global sessions and group by directory
+  const globalDir = path.join(SESSION_DIR, 'global');
+  if (fs.existsSync(globalDir)) {
+    const globalSessions = fs.readdirSync(globalDir).filter(f => f.endsWith('.json'));
+    const dirMap = {};
+    for (const f of globalSessions) {
+      const s = readJSON(path.join(globalDir, f));
+      if (s && s.directory) {
+        // Create a pseudo-project ID from directory hash
+        const pseudoId = 'global:' + Buffer.from(s.directory).toString('base64').replace(/[/+=]/g, '').slice(0, 20);
+        if (!dirMap[pseudoId]) dirMap[pseudoId] = s.directory;
+      }
+    }
+    // Add pseudo-projects for global directories not already covered
+    for (const [pseudoId, dir] of Object.entries(dirMap)) {
+      // Check if this directory already has a real project
+      const hasRealProject = projects.some(pid => {
+        const sessions = getSessions(pid);
+        return sessions.some(s => s.directory === dir);
+      });
+      if (!hasRealProject) projects.push(pseudoId);
+    }
+  }
+  return projects;
 }
 
 function getSessions(projectID) {
+  // Handle global pseudo-projects
+  if (projectID.startsWith('global:')) {
+    const globalDir = path.join(SESSION_DIR, 'global');
+    if (!fs.existsSync(globalDir)) return [];
+    // Decode directory from pseudo-ID by scanning sessions
+    return fs.readdirSync(globalDir).filter(f => f.endsWith('.json')).map(f => {
+      const s = readJSON(path.join(globalDir, f));
+      if (!s) return null;
+      const pseudoId = 'global:' + Buffer.from(s.directory || '').toString('base64').replace(/[/+=]/g, '').slice(0, 20);
+      if (pseudoId !== projectID) return null;
+      return { id: s.id, title: s.title, slug: s.slug, parentID: s.parentID, created: s.time?.created, updated: s.time?.updated, summary: s.summary, directory: s.directory };
+    }).filter(Boolean).sort((a, b) => (b.created || 0) - (a.created || 0));
+  }
+  
   const dir = path.join(SESSION_DIR, projectID);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => {
@@ -122,7 +252,7 @@ function getMessages(sessionID) {
   return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => {
     const m = readJSON(path.join(dir, f));
     if (!m) return null;
-    return { id: m.id, role: m.role, agent: m.agent || m.mode, model: m.modelID, provider: m.providerID, created: m.time?.created, completed: m.time?.completed, tokens: m.tokens, cost: m.cost, finish: m.finish, title: m.summary?.title, diffs: m.summary?.diffs?.map(d => ({ file: d.file, additions: d.additions || 0, deletions: d.deletions || 0, status: d.status })) };
+    return { id: m.id, role: m.role, agent: m.agent || m.mode, model: m.model?.modelID, provider: m.model?.providerID, created: m.time?.created, completed: m.time?.completed, tokens: m.tokens, cost: m.cost, finish: m.finish, title: m.summary?.title, diffs: m.summary?.diffs?.map(d => ({ file: d.file, additions: d.additions || 0, deletions: d.deletions || 0, status: d.status })) };
   }).filter(Boolean).sort((a, b) => (a.created || 0) - (b.created || 0));
 }
 
@@ -137,25 +267,67 @@ function getToolParts(messageID) {
     const outputLen = JSON.stringify(p.state?.output || '').length;
     const start = p.state?.time?.start;
     const end = p.state?.time?.end;
-    return { tool: p.tool, args: input, inputTokens: Math.round(inputLen / 4), outputTokens: Math.round(outputLen / 4), start, end, duration: (start && end) ? end - start : 0 };
+    // Extract diff info from edit/write tools
+    const filediff = p.state?.metadata?.filediff;
+    let diff = null;
+    if (filediff) {
+      // Count actual tokens in the new content
+      const diffTokens = filediff.after ? cachedCountTokens(filediff.after) : Math.round((filediff.additions || 0) * 10);
+      diff = { file: filediff.file, additions: filediff.additions || 0, deletions: filediff.deletions || 0, tokens: diffTokens };
+    }
+    return { tool: p.tool, args: input, inputTokens: Math.round(inputLen / 4), outputTokens: Math.round(outputLen / 4), start, end, duration: (start && end) ? end - start : 0, diff };
   }).filter(Boolean);
+}
+
+// Get LLM tokens from message parts
+// Input = user text + tool outputs (context given to LLM)
+// Output = assistant text/reasoning + tool inputs (LLM generated)
+function getMessageTokens(messageID, role) {
+  const dir = path.join(PART_DIR, messageID);
+  if (!fs.existsSync(dir)) return { input: 0, output: 0 };
+  let input = 0, output = 0;
+  
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
+    const p = readJSON(path.join(dir, f));
+    if (!p) continue;
+    
+    if (p.type === 'text' && p.text) {
+      if (role === 'user') {
+        input += cachedCountTokens(p.text);
+      } else {
+        output += cachedCountTokens(p.text);
+      }
+    } else if (p.type === 'reasoning' && p.reasoning) {
+      output += cachedCountTokens(p.reasoning);
+    } else if (p.type === 'tool') {
+      // Tool input = LLM output (it generated the call)
+      const toolInput = JSON.stringify(p.state?.input || {});
+      output += cachedCountTokens(toolInput);
+      // Tool output = LLM input (returned as context)
+      const toolOutput = JSON.stringify(p.state?.output || '');
+      input += cachedCountTokens(toolOutput);
+    }
+  }
+  return { input, output };
 }
 
 function buildTree(projectID, rootSessionID) {
   const allSessions = getSessions(projectID);
   const sessionMap = new Map(allSessions.map(s => [s.id, s]));
 
-  // Estimate tokens: ~4 chars per token for English text
+  // Get tokens from message parts
   function estimateTokens(m) {
+    // Use actual token counts from API if available
     if (m.tokens && (m.tokens.input > 0 || m.tokens.output > 0)) {
       return { input: m.tokens.input || 0, output: m.tokens.output || 0, estimated: false };
     }
-    // Fallback: estimate from title length and diffs
-    const titleLen = (m.title || '').length;
-    const diffLines = (m.diffs || []).reduce((s, d) => s + d.additions + d.deletions, 0);
-    const estOutput = Math.round((titleLen + diffLines * 40) / 4); // ~40 chars per diff line
-    const estInput = m.role === 'user' ? Math.round(titleLen / 4) : 500; // base context estimate
-    return { input: estInput, output: estOutput, estimated: true };
+    // Calculate from parts (user text, assistant text/reasoning, tool I/O)
+    const partTokens = getMessageTokens(m.id, m.role);
+    if (partTokens.input > 0 || partTokens.output > 0) {
+      return { input: partTokens.input, output: partTokens.output, estimated: false };
+    }
+    // Only mark as estimated if we truly have no data
+    return { input: 0, output: 0, estimated: true };
   }
 
   function buildNode(sid, isRoot = false) {
@@ -171,6 +343,9 @@ function buildTree(projectID, rootSessionID) {
     let totalTokens = { input: 0, output: 0, estimated: false };
     const referencedFiles = new Set();
     let humanMessages = 0;
+    const modelTokens = {}; // {provider/model: {input, output}}
+    let currentModel = null; // Track model from user messages for assistant responses
+    const agentModels = {}; // {agent: {model: {input, output}}}
 
     for (const m of msgs) {
       // Count human (user) messages - only at root level
@@ -178,6 +353,9 @@ function buildTree(projectID, rootSessionID) {
         humanMessages++;
         if (m.created) timeline.push({ time: m.created, agent: 'human', diffs: 0, tokens: 0 });
       }
+      
+      // Track current model from user messages
+      if (m.model && m.provider) currentModel = `${m.provider}/${m.model}`;
       
       const a = m.agent || 'unknown';
       if (!agents[a]) agents[a] = { messages: 0, diffs: 0, models: new Set(), startTime: null, endTime: null, tokens: { input: 0, output: 0, estimated: false } };
@@ -195,10 +373,22 @@ function buildTree(projectID, rootSessionID) {
       const tok = estimateTokens(m);
       agents[a].tokens.input += tok.input;
       agents[a].tokens.output += tok.output;
-      if (tok.estimated) agents[a].tokens.estimated = true;
+      if (tok.estimated && tok.input === 0 && tok.output === 0) agents[a].tokens.estimated = true;
       totalTokens.input += tok.input;
       totalTokens.output += tok.output;
-      if (tok.estimated) totalTokens.estimated = true;
+      if (tok.estimated && tok.input === 0 && tok.output === 0) totalTokens.estimated = true;
+      
+      // Track tokens by model (user msg sets model, assistant uses it)
+      if (currentModel && (tok.input > 0 || tok.output > 0)) {
+        if (!modelTokens[currentModel]) modelTokens[currentModel] = { input: 0, output: 0 };
+        modelTokens[currentModel].input += tok.input;
+        modelTokens[currentModel].output += tok.output;
+        // Track per-agent model usage for cost calculation
+        if (!agentModels[a]) agentModels[a] = {};
+        if (!agentModels[a][currentModel]) agentModels[a][currentModel] = { input: 0, output: 0 };
+        agentModels[a][currentModel].input += tok.input;
+        agentModels[a][currentModel].output += tok.output;
+      }
       
       // diff tokens (estimate ~4 chars per token, ~40 chars per line)
       const diffLines = (m.diffs || []).reduce((s, d) => s + (d.additions || 0), 0);
@@ -234,6 +424,7 @@ function buildTree(projectID, rootSessionID) {
     const toolStats = {};
     const flameEvents = [];
     const inefficientReads = [];
+    const toolDiffs = []; // Diffs extracted from tool parts
     for (const m of msgs) {
       const parts = getToolParts(m.id);
       for (const p of parts) {
@@ -249,10 +440,33 @@ function buildTree(projectID, rootSessionID) {
         if (p.tool === 'read' && p.args && !p.args.offset && !p.args.limit && !p.args.startLine && !p.args.endLine) {
           inefficientReads.push({ file: p.args.filePath, agent: m.agent, tokens: p.outputTokens });
         }
+        // Collect diffs from edit/write tools
+        if (p.diff && p.diff.file) {
+          toolDiffs.push({ ...p.diff, agent: m.agent });
+        }
       }
       // Add agent message spans
       if (m.created && m.completed) {
         flameEvents.push({ type: 'agent', name: m.agent || 'unknown', start: m.created, end: m.completed });
+      }
+    }
+    
+    // Merge tool diffs into files and agent stats (if not already counted from message.summary.diffs)
+    if (totalDiffs === 0 && toolDiffs.length > 0) {
+      for (const d of toolDiffs) {
+        const a = d.agent || 'unknown';
+        if (!agents[a]) agents[a] = { messages: 0, diffs: 0, models: new Set(), startTime: null, endTime: null, tokens: { input: 0, output: 0, estimated: false } };
+        agents[a].diffs++;
+        totalDiffs++;
+        if (!files[d.file]) files[d.file] = { additions: 0, deletions: 0, agents: new Set() };
+        files[d.file].additions += d.additions;
+        files[d.file].deletions += d.deletions;
+        files[d.file].agents.add(a);
+        if (d.file.includes('.opencode/')) referencedFiles.add(d.file);
+        // Use actual token count from diff
+        const lineDiffTokens = d.tokens || Math.round(d.additions * 10);
+        if (!agents[a].diffTokens) agents[a].diffTokens = 0;
+        agents[a].diffTokens += lineDiffTokens;
       }
     }
 
@@ -263,7 +477,10 @@ function buildTree(projectID, rootSessionID) {
       if (c.tokens) {
         totalTokens.input += c.tokens.input;
         totalTokens.output += c.tokens.output;
-        if (c.tokens.estimated) totalTokens.estimated = true;
+        // Only propagate estimated if child has no actual data
+        if (c.tokens.estimated && c.tokens.input === 0 && c.tokens.output === 0) {
+          totalTokens.estimated = true;
+        }
       }
       if (c.diffTokens) childDiffTokens += c.diffTokens;
       if (c.referencedFiles) c.referencedFiles.forEach(f => referencedFiles.add(f));
@@ -275,6 +492,25 @@ function buildTree(projectID, rootSessionID) {
           toolStats[tool].inputTokens += stats.inputTokens;
           toolStats[tool].outputTokens += stats.outputTokens;
           toolStats[tool].duration += stats.duration || 0;
+        }
+      }
+      // Aggregate child model tokens
+      if (c.modelTokens) {
+        for (const [model, tok] of Object.entries(c.modelTokens)) {
+          if (!modelTokens[model]) modelTokens[model] = { input: 0, output: 0 };
+          modelTokens[model].input += tok.input;
+          modelTokens[model].output += tok.output;
+        }
+      }
+      // Aggregate child agent model usage
+      if (c.agentModels) {
+        for (const [agent, models] of Object.entries(c.agentModels)) {
+          if (!agentModels[agent]) agentModels[agent] = {};
+          for (const [model, tok] of Object.entries(models)) {
+            if (!agentModels[agent][model]) agentModels[agent][model] = { input: 0, output: 0 };
+            agentModels[agent][model].input += tok.input;
+            agentModels[agent][model].output += tok.output;
+          }
         }
       }
       // Aggregate child flame events and inefficient reads
@@ -299,7 +535,7 @@ function buildTree(projectID, rootSessionID) {
       fileStats[k] = { additions: v.additions, deletions: v.deletions, agents: [...v.agents] };
     }
 
-    return { id: sid, title: session.title, directory: session.directory, agent: msgs[0]?.agent, messages: msgs.length, diffs: totalDiffs, agents: agentStats, files: fileStats, children, created: session.created, duration: (startTime && endTime) ? endTime - startTime : null, timeline, tokens: totalTokens, diffTokens: totalDiffTokens, referencedFiles: [...referencedFiles], humanMessages, toolStats, toolCalls, flameEvents, inefficientReads };
+    return { id: sid, title: session.title, directory: session.directory, agent: msgs[0]?.agent, messages: msgs.length, diffs: totalDiffs, agents: agentStats, files: fileStats, children, created: session.created, duration: (startTime && endTime) ? endTime - startTime : null, timeline, tokens: totalTokens, diffTokens: totalDiffTokens, referencedFiles: [...referencedFiles], humanMessages, toolStats, toolCalls, flameEvents, inefficientReads, modelTokens, agentModels };
   }
 
   const root = buildNode(rootSessionID, true);
@@ -776,6 +1012,9 @@ function renderDashboard(tree) {
   const maxCalls = Math.max(...Object.values(agentAgg).map(a => a.sessions), 1);
   const totalCalls = Object.values(agentAgg).reduce((s, a) => s + a.sessions, 0);
   const totalHuman = tree.humanMessages || 0;
+  const totalInTok = tree.tokens?.input || 0;
+  const totalOutTok = tree.tokens?.output || 0;
+  const totalTok = totalInTok + totalOutTok;
 
   let html = '<div class="stats">';
   html += stat(totalSessions, 'Sessions', 'Total session count including all subagent sessions');
@@ -785,12 +1024,13 @@ function renderDashboard(tree) {
   html += stat(totalDiffs, 'File Changes', 'Total file diffs produced (edits, creates, deletes)');
   html += stat(totalAgents, 'Agents Used', 'Distinct agent types that participated');
   html += stat(fmtDur(totalDuration), 'Duration', 'Wall-clock time from first to last message');
-  html += stat(fmtTokens(tree.tokens), 'Tokens', 'Total tokens used (~ = estimated from content length)');
-  const totalTok = (tree.tokens?.input || 0) + (tree.tokens?.output || 0);
+  html += stat(fmtNum(totalInTok) + (tree.tokens?.estimated ? '~' : ''), 'Input Tokens', 'LLM input: user text + tool results (~ = some messages missing data)');
+  html += stat(fmtNum(totalOutTok) + (tree.tokens?.estimated ? '~' : ''), 'Output Tokens', 'LLM output: assistant text + reasoning + tool calls');
   const diffTok = tree.diffTokens || 0;
   const ratio = diffTok > 0 ? Math.round(totalTok / diffTok) : 0;
-  html += stat(fmtTokens({input: diffTok, output: 0}), 'Diff Tokens', 'Tokens written to files (estimated from line additions)');
-  html += stat(ratio > 0 ? ratio + ':1' : '—', 'Token Ratio', 'Total tokens / diff tokens — lower is more efficient');
+  html += stat(fmtNum(diffTok), 'Diff Tokens', 'Tokens in files written (from actual file content)');
+  html += stat(ratio > 0 ? ratio + ':1' : '—', 'Token Ratio', 'Total LLM tokens / diff tokens — lower is more efficient');
+  if (tree.totalCost !== undefined) html += stat('$' + tree.totalCost.toFixed(2), 'Est. Cost', 'Estimated cost based on OpenRouter pricing');
   html += '</div>';
 
   // Charts
@@ -801,6 +1041,10 @@ function renderDashboard(tree) {
   html += '<div class="chart-box"><h3>Top 5 Token Usage by Agent <span class="tip" data-tip="Token distribution across agents">i</span></h3>' + renderTokenByAgent(agentAgg) + '</div>';
   html += '<div class="chart-box"><h3>Human Interactions <span class="tip" data-tip="When human input occurred during the session">i</span></h3>' + renderHumanChart(tree.timeline) + '</div>';
   html += '<div class="chart-box"><h3>Token Efficiency <span class="tip" data-tip="Orange = total tokens, green = diff tokens written">i</span></h3>' + renderEfficiencyChart(tree.timeline) + '</div>';
+  html += '<div class="chart-box"><h3>Input Tokens by Model <span class="tip" data-tip="Context tokens sent to each model">i</span></h3>' + renderModelTokenChart(tree.modelTokens, 'input') + '</div>';
+  html += '<div class="chart-box"><h3>Output Tokens by Model <span class="tip" data-tip="Generated tokens from each model">i</span></h3>' + renderModelTokenChart(tree.modelTokens, 'output') + '</div>';
+  html += '<div class="chart-box"><h3>Cost by Model <span class="tip" data-tip="Estimated cost per model (OpenRouter pricing)">i</span></h3>' + renderModelCostChart(tree.modelCosts) + '</div>';
+  html += '<div class="chart-box"><h3>Cost by Agent <span class="tip" data-tip="Estimated cost per agent">i</span></h3>' + renderAgentCostChart(tree.agentCosts) + '</div>';
   html += '</div>';
 
   // Waste warnings
@@ -1235,6 +1479,76 @@ function renderEfficiencyChart(timeline) {
   return svg;
 }
 
+function renderModelTokenChart(modelTokens, type) {
+  if (!modelTokens || Object.keys(modelTokens).length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No model data</text></svg>';
+  
+  const entries = Object.entries(modelTokens).map(([k, v]) => ({ model: k, tokens: type === 'input' ? v.input : v.output })).filter(e => e.tokens > 0).sort((a, b) => b.tokens - a.tokens);
+  if (entries.length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No ' + type + ' tokens</text></svg>';
+  
+  const w = 400, h = 150, pad = 20, barH = 18, gap = 4;
+  const maxTok = entries[0].tokens;
+  const barW = w - pad * 2 - 120;
+  const color = type === 'input' ? '#58a6ff' : '#f0883e';
+  
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '">';
+  entries.slice(0, 5).forEach((e, i) => {
+    const y = pad + i * (barH + gap);
+    const bw = (e.tokens / maxTok) * barW;
+    const label = e.model.replace(/^[^\\/]+\\//, '').slice(0, 18);
+    svg += '<text x="' + pad + '" y="' + (y + 13) + '" fill="#8b949e" font-size="10">' + label + '</text>';
+    svg += '<rect x="' + (pad + 100) + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="' + color + '" rx="3"/>';
+    svg += '<text x="' + (pad + 105 + bw) + '" y="' + (y + 13) + '" fill="#c9d1d9" font-size="10">' + (e.tokens > 1000000 ? (e.tokens / 1000000).toFixed(1) + 'M' : e.tokens > 1000 ? Math.round(e.tokens / 1000) + 'k' : e.tokens) + '</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+function renderModelCostChart(modelCosts) {
+  if (!modelCosts || Object.keys(modelCosts).length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No cost data</text></svg>';
+  
+  const entries = Object.entries(modelCosts).map(([k, v]) => ({ model: k, cost: v.total })).filter(e => e.cost > 0).sort((a, b) => b.cost - a.cost);
+  if (entries.length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No cost data</text></svg>';
+  
+  const w = 400, h = 150, pad = 20, barH = 18, gap = 4;
+  const maxCost = entries[0].cost;
+  const barW = w - pad * 2 - 120;
+  
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '">';
+  entries.slice(0, 5).forEach((e, i) => {
+    const y = pad + i * (barH + gap);
+    const bw = (e.cost / maxCost) * barW;
+    const label = e.model.replace(/^[^\\/]+\\//, '').slice(0, 18);
+    svg += '<text x="' + pad + '" y="' + (y + 13) + '" fill="#8b949e" font-size="10">' + label + '</text>';
+    svg += '<rect x="' + (pad + 100) + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="#3fb950" rx="3"/>';
+    svg += '<text x="' + (pad + 105 + bw) + '" y="' + (y + 13) + '" fill="#c9d1d9" font-size="10">$' + (e.cost >= 1 ? e.cost.toFixed(2) : e.cost.toFixed(3)) + '</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+function renderAgentCostChart(agentCosts) {
+  if (!agentCosts || Object.keys(agentCosts).length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No cost data</text></svg>';
+  
+  const entries = Object.entries(agentCosts).map(([k, v]) => ({ agent: k, cost: v })).filter(e => e.cost > 0).sort((a, b) => b.cost - a.cost);
+  if (entries.length === 0) return '<svg viewBox="0 0 400 150"><text x="200" y="75" fill="#484f58" text-anchor="middle" font-size="12">No cost data</text></svg>';
+  
+  const w = 400, h = 150, pad = 20, barH = 18, gap = 4;
+  const maxCost = entries[0].cost;
+  const barW = w - pad * 2 - 120;
+  
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '">';
+  entries.slice(0, 5).forEach((e, i) => {
+    const y = pad + i * (barH + gap);
+    const bw = (e.cost / maxCost) * barW;
+    const label = e.agent.slice(0, 18);
+    svg += '<text x="' + pad + '" y="' + (y + 13) + '" fill="#8b949e" font-size="10">' + label + '</text>';
+    svg += '<rect x="' + (pad + 100) + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="#f778ba" rx="3"/>';
+    svg += '<text x="' + (pad + 105 + bw) + '" y="' + (y + 13) + '" fill="#c9d1d9" font-size="10">$' + (e.cost >= 1 ? e.cost.toFixed(2) : e.cost.toFixed(3)) + '</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
 // Chat functionality
 const chatToggle = document.getElementById('chatToggle');
 const chatLabel = document.getElementById('chatLabel');
@@ -1458,9 +1772,11 @@ function renderSwarmPanel(swarm) {
   if (reqs.length) {
     html += '<div class="swarm-list">';
     reqs.forEach(r => {
-      const status = r.approved === 'true' ? 'approved' : 'pending';
+      const isComplete = r.status === 'complete' || r.status === 'completed' || r.approved === 'true';
+      const statusClass = isComplete ? 'done' : 'pending';
+      const label = r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Pending';
       html += '<div class="swarm-item"><span class="name">' + r.file + '</span>';
-      html += '<span class="status ' + status + '">' + (r.approved === 'true' ? 'Approved' : 'Pending') + '</span>';
+      html += '<span class="status ' + statusClass + '">' + label + '</span>';
       html += '<button class="swarm-btn" data-path="' + encodeURIComponent(r.path) + '" onclick="viewFile(decodeURIComponent(this.dataset.path))">View</button></div>';
     });
     html += '</div>';
@@ -1473,9 +1789,11 @@ function renderSwarmPanel(swarm) {
   if (designs.length) {
     html += '<div class="swarm-list">';
     designs.forEach(d => {
-      const status = d.approved === 'true' ? 'approved' : 'pending';
+      const isComplete = d.status === 'complete' || d.status === 'completed' || d.approved === 'true' || d.approved === true;
+      const status = isComplete ? 'done' : 'pending';
+      const label = isComplete ? 'Approved' : (d.status || 'Pending');
       html += '<div class="swarm-item"><span class="name">' + d.file + '</span>';
-      html += '<span class="status ' + status + '">' + (d.approved === 'true' ? 'Approved' : 'Pending') + '</span>';
+      html += '<span class="status ' + status + '">' + label + '</span>';
       html += '<button class="swarm-btn" data-path="' + encodeURIComponent(d.path) + '" onclick="viewFile(decodeURIComponent(this.dataset.path))">View</button></div>';
     });
     html += '</div>';
@@ -1663,6 +1981,7 @@ function generateAIReport(tree) {
   const totalTok = totalInTok + totalOutTok;
   const diffTok = tree.diffTokens || 0;
   const ratio = diffTok > 0 ? Math.round(totalTok / diffTok) : 0;
+  const estimated = tree.tokens?.estimated ? ' (estimated)' : '';
   
   let report = `# Swarm Session Analytics Report
 
@@ -1671,14 +1990,28 @@ function generateAIReport(tree) {
   <sessions>${flat.length}</sessions>
   <messages>${totalMsgs}</messages>
   <diffs>${totalDiffs}</diffs>
-  <input_tokens>${totalInTok}</input_tokens>
-  <output_tokens>${totalOutTok}</output_tokens>
+  <input_tokens${estimated}>${totalInTok}</input_tokens>
+  <output_tokens${estimated}>${totalOutTok}</output_tokens>
   <diff_tokens>${diffTok}</diff_tokens>
   <token_ratio>${ratio}:1</token_ratio>
   <duration_ms>${tree.duration || 0}</duration_ms>
   <human_inputs>${tree.humanMessages || 0}</human_inputs>
+  <estimated_cost>${tree.totalCost !== undefined ? '$' + tree.totalCost.toFixed(2) : 'N/A'}</estimated_cost>
 </session_summary>
+`;
 
+  // Model breakdown with costs
+  if (tree.modelTokens && Object.keys(tree.modelTokens).length > 0) {
+    report += `\n## Tokens by Model\n\n<models>\n`;
+    for (const [model, tok] of Object.entries(tree.modelTokens).sort((a, b) => (b[1].input + b[1].output) - (a[1].input + a[1].output))) {
+      const cost = tree.modelCosts?.[model];
+      const costStr = cost ? ` cost="$${cost.total.toFixed(3)}"` : '';
+      report += `  <model name="${model}" input="${tok.input}" output="${tok.output}"${costStr}/>\n`;
+    }
+    report += `</models>\n`;
+  }
+
+  report += `
 ## Session Tree
 
 | Session | Agent | Msgs | Diffs | In Tok | Out Tok | Ratio |
@@ -1814,9 +2147,15 @@ function generateAIReport(tree) {
   report += `
 ## Interpretation Guide
 
-**Token Ratio**: Total tokens consumed / tokens written to files. Lower is more efficient.
+**Token Counting**:
+- Input tokens: User text + tool results (context sent to LLM)
+- Output tokens: Assistant text + reasoning + tool calls (LLM generated)
+- Diff tokens: Actual tokens in files written (from file content)
+- Counts use Claude tokenizer for accuracy
+
+**Token Ratio**: Total LLM tokens / diff tokens. Lower is more efficient.
 - <10:1 = Excellent efficiency
-- 10-30:1 = Normal for complex tasks
+- 10-30:1 = Normal for complex tasks  
 - 30-50:1 = Consider optimization
 - >50:1 = Significant overhead, investigate
 
@@ -1869,7 +2208,7 @@ function generateReportContext(tree) {
   return ctx;
 }
 
-function handler(req, res) {
+async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -1885,6 +2224,21 @@ function handler(req, res) {
       return res.end('Missing project or session parameter. Usage: /ai?project=<id>&session=<id>');
     }
     const tree = buildTree(projectID, sessionID);
+    // Add cost estimates
+    if (tree && tree.modelTokens) {
+      await fetchPricing();
+      tree.modelCosts = {};
+      let totalCost = 0;
+      for (const [model, tok] of Object.entries(tree.modelTokens)) {
+        const pricing = lookupPricing(model);
+        if (pricing) {
+          const cost = tok.input * pricing.prompt + tok.output * pricing.completion;
+          tree.modelCosts[model] = { input: tok.input * pricing.prompt, output: tok.output * pricing.completion, total: cost };
+          totalCost += cost;
+        }
+      }
+      tree.totalCost = totalCost;
+    }
     const report = generateAIReport(tree);
     res.writeHead(200, { 'Content-Type': 'text/markdown' });
     return res.end(report);
@@ -1908,6 +2262,33 @@ function handler(req, res) {
   if (url.pathname.startsWith('/api/tree/')) {
     const parts = url.pathname.split('/');
     const tree = buildTree(parts[3], parts[4]);
+    // Add cost estimates
+    if (tree && tree.modelTokens) {
+      await fetchPricing();
+      tree.modelCosts = {};
+      let totalCost = 0;
+      for (const [model, tok] of Object.entries(tree.modelTokens)) {
+        const pricing = lookupPricing(model);
+        if (pricing) {
+          const cost = tok.input * pricing.prompt + tok.output * pricing.completion;
+          tree.modelCosts[model] = { input: tok.input * pricing.prompt, output: tok.output * pricing.completion, total: cost };
+          totalCost += cost;
+        }
+      }
+      tree.totalCost = totalCost;
+      // Calculate agent costs
+      if (tree.agentModels) {
+        tree.agentCosts = {};
+        for (const [agent, models] of Object.entries(tree.agentModels)) {
+          let agentCost = 0;
+          for (const [model, tok] of Object.entries(models)) {
+            const pricing = lookupPricing(model);
+            if (pricing) agentCost += tok.input * pricing.prompt + tok.output * pricing.completion;
+          }
+          tree.agentCosts[agent] = agentCost;
+        }
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(tree));
   }
