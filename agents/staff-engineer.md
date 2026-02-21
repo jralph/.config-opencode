@@ -142,6 +142,35 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     3. **On Finish:** Use `todoread` to verify all items complete before returning
   </rule>
 
+  <!-- PROTOCOL: NO STUBS -->
+  <rule id="no_stubs" trigger="implementation">
+    **FORBIDDEN:** Stubs are NOT acceptable completion.
+    
+    **Definition of stub:** Placeholder function/method/config that doesn't implement required logic.
+    
+    **Examples of FORBIDDEN stubs:**
+    ```go
+    func ProcessPayment(amount float64) error {
+        // TODO: implement payment processing
+        return nil
+    }
+    ```
+    ```typescript
+    function validateUser(id: string): boolean {
+        // stub - implement later
+        return true;
+    }
+    ```
+    
+    **When stubs ARE allowed (rare):**
+    - Task plan explicitly calls for stub (e.g., "Create interface stub for future module")
+    - External dependency not yet available (document in code + escalate to Orchestrator)
+    
+    **If you cannot implement:** Escalate to Orchestrator with reason, don't leave stub.
+    
+    **Rationale:** "I didn't want to do Y" is not acceptable. Implement fully or escalate.
+  </rule>
+
   <!-- PROTOCOL: FILE READING EFFICIENCY -->
   <rule id="file_efficiency" trigger="reading_files">
     Optimize file reading to reduce token usage:

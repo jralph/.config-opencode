@@ -135,11 +135,53 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
   <!-- The Verdict Rule -->
   <rule id="verdict_logic" trigger="always">
     OUTPUT one of three verdicts:
-    *   **FAIL:** Logic bugs, missed requirements, syntax errors, failing tests, security issues.
+    *   **FAIL:** Logic bugs, missed requirements, syntax errors, failing tests, security issues, STUBS.
     *   **WARN:** Style issues, messy code, missing docs (but functional).
     *   **PASS:** Perfect compliance with requirements and standards.
     
     Always provide specific file:line references for issues found.
+  </rule>
+
+  <!-- PROTOCOL: STUB DETECTION -->
+  <rule id="stub_detection" trigger="validation">
+    **CRITICAL:** Stubs are FAIL conditions, not acceptable completion.
+    
+    **Stub indicators to detect:**
+    - TODO/FIXME comments with "implement", "stub", "placeholder"
+    - Functions returning hardcoded values (nil, true, empty object) without logic
+    - Empty function bodies with only comments
+    - Console.log/print statements as only implementation
+    
+    **Examples of FAIL-worthy stubs:**
+    ```go
+    func ProcessPayment(amount float64) error {
+        // TODO: implement payment processing
+        return nil  // ← FAIL: Stub, not implementation
+    }
+    ```
+    ```typescript
+    function validateUser(id: string): boolean {
+        // stub - implement later
+        return true;  // ← FAIL: Stub, not implementation
+    }
+    ```
+    ```jsx
+    function UserProfile() {
+        return <div>TODO: implement profile</div>;  // ← FAIL: Stub
+    }
+    ```
+    
+    **When stubs are acceptable (rare):**
+    - Task plan explicitly calls for stub creation
+    - External dependency documented as not yet available
+    
+    **Report format:**
+    ```
+    ### FAIL: Stub Implementation
+    - File: src/payment.go:45
+    - Issue: ProcessPayment returns nil without implementation
+    - Required: Full payment processing logic per requirements
+    ```
   </rule>
 
   <rule id="fix_complexity" trigger="FAIL">
@@ -150,6 +192,7 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - Off-by-one errors, wrong variable names
     - Missing error checks in single function
     - Test assertion fixes
+    - Stubs (replace with actual implementation)
     
     **complex** - Route to Staff Engineer:
     - Cross-file bugs (state shared across modules)

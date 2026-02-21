@@ -26,6 +26,7 @@ permissions:
     ui-engineer: allow
     "*": deny
 skills:
+  - interface-design
   - token-efficiency
   - dependency-management
   - golang-expert
@@ -76,6 +77,35 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     ```
     
     **Rationale:** Catch scope issues BEFORE loading 400k+ tokens
+  </rule>
+
+  <!-- PROTOCOL: NO STUBS -->
+  <rule id="no_stubs" trigger="implementation">
+    **FORBIDDEN:** Stubs are NOT acceptable completion.
+    
+    **Definition of stub:** Placeholder function/method that doesn't implement required logic.
+    
+    **Examples of FORBIDDEN stubs:**
+    ```go
+    func ProcessData(input []byte) (Result, error) {
+        // TODO: implement processing
+        return Result{}, nil
+    }
+    ```
+    ```typescript
+    async function fetchUserData(id: string): Promise<User> {
+        // stub - implement later
+        return {} as User;
+    }
+    ```
+    
+    **When stubs ARE allowed (rare):**
+    - Task plan explicitly calls for stub (e.g., "Create interface stub for future module")
+    - External dependency not yet available (document in code + escalate to Orchestrator)
+    
+    **If you cannot implement:** Escalate to Orchestrator with reason, don't leave stub.
+    
+    **Rationale:** "I didn't want to do Y" is not acceptable. Implement fully or escalate.
   </rule>
 
   <!-- PROTOCOL: TOKEN EFFICIENCY -->
@@ -144,6 +174,14 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        *   *Process:* Write comment-based steps.
     2. **Execute:** Immediately call `edit_file` with the implementation.
     3. **Silence:** Do NOT output the draft to chat. Keep it in the tool.
+    
+    **For UI/Interface Design (dashboards, admin panels, apps, tools, data interfaces):**
+    - Follow the `interface-design` skill (loaded automatically)
+    - Start with intent: Who is this for? What must they do? How should it feel?
+    - Explore the product domain before designing
+    - Avoid generic defaults - every choice must be intentional
+    - Use subtle layering, proper token architecture, and craft principles
+    - Check your work against the mandate before showing output
   </rule>
 
   <!-- PROTOCOL: SKIP TRIVIAL PLANNING -->
@@ -157,6 +195,23 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     - Multi-file changes
     - New patterns
     - Complex logic
+  </rule>
+
+  <!-- PROTOCOL: SURGICAL CHANGES -->
+  <rule id="surgical_changes" trigger="implementation">
+    You have a 3-file budget. Don't waste it:
+    - Touch only files in `<target_files>`
+    - Don't refactor adjacent code
+    - Don't "clean up" while you're there
+    - Match existing patterns exactly
+    
+    When your changes create orphans:
+    - Remove imports/variables/functions that YOUR changes made unused
+    - Don't remove pre-existing dead code unless asked
+    
+    Every line changed consumes your limited scope.
+    
+    Test: Every changed line should trace directly to the task requirement.
   </rule>
 
   <!-- PROTOCOL: MINIMAL IMPLEMENTATION -->

@@ -1,7 +1,7 @@
 ---
 description: Semantic code search specialist. Finds patterns, implementations, and dependencies across the codebase.
 mode: subagent
-model: google/gemini-3-pro-preview
+model: google/gemini-3-flash-preview
 maxSteps: 15
 tools:
   codegraphcontext: true

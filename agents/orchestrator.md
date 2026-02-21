@@ -1,7 +1,7 @@
 ---
 description: Orchestrates implementation by delegating to engineers and managing gates.
 mode: subagent
-model: kiro/claude-sonnet-4-5
+model: kiro/claude-sonnet-4-6
 maxSteps: 100
 tools:
   task: true

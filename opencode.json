@@ -6,6 +6,7 @@
     // "@tarquinen/opencode-dcp@latest",
     // "@ramtinj95/opencode-tokenscope",
     // "opencode-helicone-session",
+    //"opencode-antigravity-auth@latest",
     "@zenobius/opencode-skillful",
     // "opencode-wakatime",
     "opencode-sessions",
@@ -137,9 +138,15 @@
     "chrome-devtools": {
       "type": "local",
       "command": [
+        "cmd.exe",
+        "/c",
         "npx",
         "-y",
-        "chrome-devtools-mcp@latest"
+        "chrome-devtools-mcp@latest",
+        "--headless",
+        "false",
+        "--isolated",
+        "true"
       ]
     },
     "frontend": {

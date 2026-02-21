@@ -58,6 +58,34 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
     3. **On Finish:** Use `todoread` to verify all items complete before returning
   </rule>
 
+  <!-- PROTOCOL: NO STUBS -->
+  <rule id="no_stubs" trigger="implementation">
+    **FORBIDDEN:** Stubs are NOT acceptable completion.
+    
+    **Definition of stub:** Placeholder script/config that doesn't implement required logic.
+    
+    **Examples of FORBIDDEN stubs:**
+    ```yaml
+    # TODO: implement actual deployment steps
+    deploy:
+      script: echo "deployment placeholder"
+    ```
+    ```hcl
+    # stub - configure later
+    resource "aws_instance" "app" {
+      # TODO: add configuration
+    }
+    ```
+    
+    **When stubs ARE allowed (rare):**
+    - Task plan explicitly calls for stub (e.g., "Create pipeline skeleton for future stages")
+    - External resource not yet provisioned (document in code + escalate to Orchestrator)
+    
+    **If you cannot implement:** Escalate to Orchestrator with reason, don't leave stub.
+    
+    **Rationale:** "I didn't want to do Y" is not acceptable. Implement fully or escalate.
+  </rule>
+
   <!-- PROTOCOL: TEST EXECUTION -->
   <rule id="test_execution" trigger="running_tests">
     Prefer Makefile targets over language-specific test commands.
@@ -101,6 +129,24 @@ Follow these rules exactly, both markdown and xml rules must be adhered to.
        *   *Process:* Trace the execution flow.
     2. **Execute:** Immediately call `edit_file` with the implementation.
     3. **Silence:** Do NOT output the draft to chat. Keep it in the tool.
+  </rule>
+
+  <!-- PROTOCOL: SURGICAL CHANGES -->
+  <rule id="surgical_changes" trigger="implementation">
+    Infrastructure changes have blast radius. Be surgical:
+    - Touch only resources in `<target_file>`
+    - Don't "optimize" adjacent resources
+    - Don't refactor working infrastructure
+    - Match existing patterns exactly
+    - If you notice issues elsewhere, report (don't fix)
+    
+    When your changes create orphans:
+    - Remove variables/outputs that YOUR changes made unused
+    - Don't remove pre-existing dead code unless asked
+    
+    Exception: If your changes break dependencies, fix the integration.
+    
+    Test: Every changed resource should trace directly to the requirement.
   </rule>
 
   <!-- PROTOCOL: MINIMAL IMPLEMENTATION -->

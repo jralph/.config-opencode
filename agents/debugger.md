@@ -1,7 +1,7 @@
 ---
 description: Investigative debugging specialist for diagnosing runtime issues, protocol mismatches, and complex failures.
 mode: all
-model: kiro/claude-sonnet-4-5
+model: kiro/claude-sonnet-4-6
 maxSteps: 25
 tools:
   task: true

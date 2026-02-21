@@ -1,7 +1,7 @@
 ---
 description: Project Librarian. Answers queries about history, context, and existing features.
-mode: subagent
-model: google/gemini-3-pro-preview
+mode: all
+model: google/gemini-3-flash-preview
 maxSteps: 20
 tools:
   # Memory Tools
